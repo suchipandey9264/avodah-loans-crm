@@ -1,4 +1,4 @@
-// Loan products, employment types and the lender catalogue — served by the API.
+// Loan products, employment types and the sample lender catalogue (loaded by `npm run seed`) — used by the CRM API.
 // NOTE: rates, limits and features are indicative SAMPLE data. Replace with live lender data before launch.
 
 const L = 1e5;
@@ -25,7 +25,6 @@ export const EMPLOYMENT = [
   { id: "freelancer", group: "self", label: "Freelancer / gig worker", desc: "Contract, freelance or platform-based income", icon: "Laptop", incomeLabel: "Annual income (as per latest ITR)", docs: ["2 years’ ITR", "Contracts or invoices", "12 months’ bank statement"] },
   { id: "retired", group: "salaried", label: "Retired / pensioner", desc: "Regular pension from a former employer", icon: "Wallet", incomeLabel: "Annual pension income", docs: ["Pension slips / PPO", "6 months’ bank statement", "Age proof"] },
 ];
-export const empById = (id) => EMPLOYMENT.find((e) => e.id === id);
 
 const FEATURES = {
   home: ["Door step service", "Overdraft facility", "Balance transfer", "Top-up loan", "Pre-EMI option", "Women borrower concession"],
@@ -42,14 +41,6 @@ const LIMITS = {
   home: [10 * CR, 5 * CR, 2 * CR], lap: [10 * CR, 5 * CR, 2 * CR], personal: [40 * L, 25 * L, 10 * L],
   education: [1.5 * CR, 75 * L, 40 * L], gold: [1 * CR, 50 * L, 25 * L], business: [5 * CR, 1 * CR, 50 * L], car: [1 * CR, 50 * L, 25 * L],
 };
-
-export const LENDER_KINDS = [
-  { id: "PVT Bank", long: "Private sector bank" },
-  { id: "PSU Bank", long: "Public sector bank" },
-  { id: "HFC", long: "Housing finance company" },
-  { id: "NBFC", long: "Non-banking financial company" },
-];
-export const kindLabel = (k) => LENDER_KINDS.find((x) => x.id === k)?.long ?? k;
 
 const FEES = { "PSU Bank": "0.35% – 0.50%", "PVT Bank": "0.50% – 1%", NBFC: "Up to 2%", HFC: "0.50% – 1%" };
 const ABOUT = {
@@ -149,32 +140,3 @@ export const LENDERS = RAW.map(([id, name, logo, kind, tier, rates], i) => {
   }).filter(Boolean);
   return { id, name, fullName: FULL_NAMES[id] ?? name, logo, kind, tier, products, fee: FEES[kind], about: ABOUT[kind], lowestRate: Math.min(...products.map((p) => p.rate)) };
 });
-
-export const lenderById = (id) => LENDERS.find((l) => l.id === id);
-
-export const ELIGIBILITY = {
-  salaried: ["Age 21–60 years", "At least 1 year of total work experience", "Net monthly income from ₹25,000 (varies by city & product)", "CIBIL score of 700+ preferred"],
-  self: ["Age 25–65 years", "Business or practice running for 2+ years", "ITR filed for the last 2 years", "CIBIL score of 700+ preferred"],
-};
-export const DOCUMENTS = {
-  salaried: ["PAN card & Aadhaar", "Last 3 months’ salary slips", "Last 6 months’ bank statement", "Form 16 / latest ITR"],
-  self: ["PAN card & Aadhaar", "Last 2 years’ ITR with computation", "Last 12 months’ bank statement", "Business proof (GST / Udyam / registration)"],
-};
-
-/** Builds the offer list for a search. EMI uses the reducing-balance formula. */
-export function getOffers({ type, amount, tenure, annualIncome }, emiFn, lenders = LENDERS) {
-  const monthlyIncome = annualIncome / 12;
-  return lenders.flatMap((l) => {
-    const p = l.products.find((x) => x.type === type);
-    if (!p) return [];
-    const loanAmount = Math.min(amount, p.maxAmount);
-    const emi = emiFn(loanAmount, p.rate, tenure * 12);
-    // Lenders typically cap total EMI at ~50% of monthly income (FOIR).
-    const eligible = monthlyIncome > 0 && emi <= monthlyIncome * 0.5;
-    return [{
-      id: l.id, name: l.name, fullName: l.fullName ?? l.name, logo: l.logo, kind: l.kind, fee: l.fee,
-      rate: p.rate, maxAmount: p.maxAmount, maxTenure: p.maxTenure, features: p.features,
-      loanAmount, emi, eligible, cappedAmount: amount > p.maxAmount,
-    }];
-  });
-}

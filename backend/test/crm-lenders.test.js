@@ -35,11 +35,6 @@ describe("lenders", () => {
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.deepEqual([res.body.lender.lowestRate, res.body.lender.contacts[0].name, res.body.lender.active], [8.4, "Gurpreet Agarwal", true]);
     assert.equal((await api("owner", "/crm/lenders", { method: "POST", body: { id: "acme", name: "Acme Again", kind: "NBFC" } })).status, 409);
-    const pub = await s.api("/lenders/acme");
-    assert.equal(pub.status, 200);
-    assert.equal(pub.body.lender.products.find((p) => p.type === "home").rate, 8.4);
-    const offers = await s.api("/offers?type=home&amount=3000000&tenure=20&income=1200000");
-    assert.ok(offers.body.offers.some((o) => o.id === "acme"), "the website's offers include the new lender");
   });
 
   test("applications follow the product: min tenure enforced, figures roll up to the lender", async () => {
@@ -55,22 +50,20 @@ describe("lenders", () => {
     assert.equal(d.applications[0].id, appId);
   });
 
-  test("edit: rate change updates the website's lowest rate; removing a product with open files is refused", async () => {
+  test("edit: rate change updates the lowest rate; removing a product with open files is refused", async () => {
     assert.equal((await api("analyst", "/crm/lenders/acme", { method: "PATCH", body: { products: [{ ...HOME, rate: 8.1 }, PERSONAL] } })).status, 403, "rate cards and payouts are Admin-only");
     let res =await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { products: [{ ...HOME, rate: 8.1 }, PERSONAL] } });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.lender.lowestRate, 8.1);
-    assert.equal((await s.api("/lenders/acme")).body.lender.lowestRate, 8.1);
     res = await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { products: [PERSONAL] } });
     assert.equal(res.status, 409);
     assert.match(res.body.error, /Home Loan \(1 open application\)/);
     assert.equal((await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { products: [{ ...HOME, rate: 8.1 }] } })).status, 200, "an unused product can go");
   });
 
-  test("deactivate: hidden from the website and new applications, existing files still open", async () => {
+  test("deactivate: hidden from new applications, existing files still open", async () => {
     const res = await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { active: false } });
     assert.equal(res.body.lender.active, false);
-    assert.equal((await s.api("/lenders/acme")).status, 404);
     const neu = await api("owner", "/crm/applications", { method: "POST", body: { customerId, lenderId: "acme", loanType: "home", loanAmount: 3000000, tenureMonths: 240 } });
     assert.equal(neu.body.fields.lenderId, "Choose an active lender");
     assert.equal((await api("owner", `/crm/applications/${appId}`)).body.lender.active, false);
@@ -102,7 +95,6 @@ describe("lenders", () => {
     assert.equal(list.lenders.length, 1, "filters narrow the rows…");
     assert.deepEqual([list.totals.total, list.totals.avgTatDays, list.totals.avgPayoutPct, list.totals.payoutEarned, list.totals.disbursed], [2, 9, 1, 10000, 2000000], "…but totals cover the network");
     assert.equal((await api("emp", "/crm/lenders/acme")).body.lender.stats.payoutEarned, 10000);
-    assert.equal((await s.api("/lenders/acme")).body.lender.payoutPct, undefined, "partnership terms stay off the public website");
   });
 
   test("delete: only lenders without applications; needs lenders.delete", async () => {

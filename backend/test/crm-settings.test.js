@@ -39,21 +39,8 @@ test("general settings: defaults, admin-only changes, validation, audit trail", 
   assert.deepEqual(log.meta.fields.sort(), ["companyName", "notificationEmail"]);
 });
 
-test("lead assignment: manual leaves website leads unassigned; auto gives them to the least-loaded executive", async () => {
-  const send = (name, phone) => s.api("/leads/callback", { method: "POST", body: { name, phone } });
-  assert.equal((await send("Manual Lead", "9811111111")).status, 201);
-  assert.equal((await s.pg.query(`select owner_id from leads where name = 'Manual Lead'`)).rows[0].owner_id, null);
-
-  await api("admin", "/crm/settings/general", { method: "PATCH", body: { leadAssignment: "auto" } });
-  await s.pg.query(`insert into leads (kind, name, phone, owner_id, status) values ('crm', 'Busy', '9822222222', $1, 'new')`, [id.emp1]);
-  assert.equal((await send("Auto Lead", "9833333333")).status, 201);
-  const row = (await s.pg.query(`select id, owner_id from leads where name = 'Auto Lead'`)).rows[0];
-  assert.equal(row.owner_id, id.emp2, "emp1 already has an open lead");
-  const ev = (await s.pg.query(`select meta from timeline_events where entity_id = $1 and type = 'assigned'`, [row.id])).rows[0];
-  assert.equal(ev.meta.auto, true);
-});
-
 test("notification preferences switch bell items off for that user only", async () => {
+  await s.pg.query(`insert into leads (kind, name, phone, status) values ('crm', 'Bell Lead', '9833333333', 'new')`);
   assert.deepEqual((await api("manager", "/crm/notifications/preferences")).body.preferences, { leads: true, applications: true, followups: true, security: true });
   assert.ok((await api("manager", "/crm/notifications")).body.items.some((n) => n.type === "lead"));
   const put = await api("manager", "/crm/notifications/preferences", { method: "PUT", body: { leads: false } });
@@ -68,7 +55,7 @@ test("notification preferences switch bell items off for that user only", async 
 });
 
 test("follow-up reminder window follows the setting", async () => {
-  const lead = (await s.pg.query(`select id from leads where name = 'Auto Lead'`)).rows[0].id;
+  const lead = (await s.pg.query(`select id from leads where name = 'Bell Lead'`)).rows[0].id;
   await s.pg.query(`insert into followups (lead_id, type, due_at, assigned_to) values ($1, 'call', now() + interval '100 minutes', $2)`, [lead, id.emp2]);
   const due = async () => (await api("emp2", "/crm/notifications")).body.items.filter((n) => n.title === "Follow-up due soon").length;
   assert.equal(await due(), 0, "60-minute window by default");

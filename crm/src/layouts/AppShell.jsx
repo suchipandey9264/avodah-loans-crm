@@ -9,8 +9,8 @@ import { Avatar, Spinner } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import { NAV } from "../lib/navigation";
 
-// Same variable as lender logos (.env.example); empty = the site shares the CRM's origin.
-const PUBLIC_SITE = import.meta.env.VITE_SITE_URL || (import.meta.env.DEV ? "http://localhost:5173" : "/");
+// The public website is hosted elsewhere; the sidebar link shows only when VITE_SITE_URL is set (.env.example).
+const PUBLIC_SITE = import.meta.env.VITE_SITE_URL;
 
 function Logo() {
   return (
@@ -59,6 +59,7 @@ function SidebarNav({ onNavigate }) {
 }
 
 function SidebarFooter() {
+  if (!PUBLIC_SITE) return null;
   return (
     <div className="border-t border-white/10 px-3 py-3">
       <a href={PUBLIC_SITE} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-night-text hover:bg-night-soft hover:text-white">

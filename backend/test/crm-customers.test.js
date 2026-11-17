@@ -92,36 +92,6 @@ describe("add customer", () => {
   });
 });
 
-describe("website and CRM share one customer profile", () => {
-  let cid, token;
-  const p = phone();
-  before(async () => {
-    const otp = await s.api("/auth/otp", { method: "POST", body: { phone: p } });
-    token = (await s.api("/auth/verify", { method: "POST", body: { phone: p, otp: otp.body.devOtp, name: "Neha Iyer" } })).body.token;
-    // The customer fills in their website profile.
-    await s.api("/me/profile", { method: "PATCH", token, body: { dob: "1992-02-02", pan: "BCDPE1234F", city: "Mumbai", employment: { company: "Infosys", designation: "Engineer" } } });
-    cid = (await list("emp", { q: p })).body.customers[0].id;
-  });
-
-  test("a website sign-up is a customer with a code, and the CRM sees their website details", async () => {
-    const d = (await detail("analyst", cid)).body;
-    assert.match(d.customer.code, /^C-/);
-    assert.deepEqual([d.customer.name, d.customer.dob, d.customer.pan, d.customer.city, d.customer.company], ["Neha Iyer", "1992-02-02", "BCDPE1234F", "Mumbai", "Infosys"]);
-    assert.equal(d.history.at(-1).type, "registered");
-  });
-
-  test("CRM edits show on the website, and website-only fields are kept", async () => {
-    const res = await api("emp", `/crm/customers/${cid}`, { method: "PATCH", body: { city: "Thane", pincode: "400601", company: "Infosys BPM", annualIncome: 1500000 } });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    const web = (await s.api("/me/activity", { token })).body.profile;
-    assert.equal(web.city, "Thane");
-    assert.equal(web.pincode, "400601");
-    assert.equal(web.employment.company, "Infosys BPM");
-    assert.equal(web.employment.designation, "Engineer", "the website's own field survives");
-    assert.equal(web.pan, "BCDPE1234F");
-  });
-});
-
 describe("edit, KYC, credit score, RM and history", () => {
   test("each kind of change is its own history entry; sensitive values aren't copied into history", async () => {
     const res = await api("analyst", `/crm/customers/${id.gurpreet}`, { method: "PATCH", body: { pan: "APLPA8345B", kycStatus: "re_kyc", creditScore: 790, relationshipManagerId: id.manager, address: "22 New Road" } });
@@ -318,6 +288,7 @@ describe("listing: stats, search, filters, sort, pagination", () => {
     assert.ok(mine.some((c) => c.id === id.gurpreet) && mine.every((c) => c.relationshipManagerName === "Meera Manager"));
     assert.ok((await list("emp", { rm: id.emp })).body.customers.every((c) => c.relationshipManagerName === "Imran Sheikh"));
     assert.ok((await list("emp", { rm: "none" })).body.customers.every((c) => c.relationshipManagerName === null));
+    assert.equal((await createCustomer("emp", { name: "Neha Iyer", phone: phone(), city: "Thane" })).status, 201);
     assert.deepEqual((await list("emp", { city: "THANE" })).body.customers.map((c) => c.name), ["Neha Iyer"]);
   });
 

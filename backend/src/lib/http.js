@@ -19,12 +19,10 @@ export class HttpError extends Error {
 export const sha256 = (s) => createHash("sha256").update(s).digest("hex");
 
 /**
- * Reads the Bearer token. A customer session attaches req.user (website API);
- * a staff session attaches req.staff + req.staffSession (CRM API). Each login only opens its own API.
+ * Reads the Bearer token. A staff session attaches req.staff + req.staffSession (CRM API).
+ * Customer sessions left over from the old website are ignored.
  */
 export async function session(req, _res, next) {
-  req.user = null;
-  req.tokenHash = null;
   req.staff = null;
   req.staffSession = null;
   const token = req.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -40,11 +38,7 @@ export async function session(req, _res, next) {
     .limit(1);
   if (!row) return next();
 
-  if (row.session.kind === "customer") {
-    req.tokenHash = tokenHash;
-    req.user = row.user;
-    return next();
-  }
+  if (row.session.kind !== "staff") return next();
 
   // Staff: the account must still be active with a role, and the session must not have gone idle.
   const lastSeen = row.session.lastSeenAt ?? row.session.createdAt;
@@ -59,18 +53,3 @@ export async function session(req, _res, next) {
   req.staffSession = { id: row.session.id, tokenHash };
   next();
 }
-
-export function requireUser(req, _res, next) {
-  if (!req.user) return next(new HttpError(401, "Please log in"));
-  next();
-}
-
-/** Shape returned to the browser. `id` is the phone or email the user signed in with. */
-export const publicUser = (u) => ({
-  id: u.phone || u.email,
-  name: u.name ?? "",
-  phone: u.phone ?? null,
-  email: u.email ?? null,
-  since: new Date(u.createdAt).getTime(),
-  profile: u.profile ?? {},
-});

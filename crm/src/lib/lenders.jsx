@@ -12,10 +12,9 @@ export const ActiveBadge = ({ active }) => <Badge tone={active ? "green" : "gray
 export const pct = (n, digits = 2) => (n == null ? "—" : `${+Number(n).toFixed(digits)}%`);
 export const years = (min, max) => (min ? `${min}–${max} yrs` : `${max} yrs`);
 
-// Logos are site paths (/bank-logos/x.png) served by the public website, or full https links.
-const SITE = import.meta.env.VITE_SITE_URL ?? "";
+// Logos are paths served by the CRM itself (public/bank-logos/x.png), or full https links.
 export function LenderLogo({ lender, size = "md" }) {
-  const src = lender.logo ? (lender.logo.startsWith("/") ? SITE + lender.logo : lender.logo) : null;
+  const src = lender.logo || null;
   const [broken, setBroken] = useState(null);
   const box = size === "lg" ? "h-12 w-20" : "h-8 w-12";
   if (!src || broken === src)

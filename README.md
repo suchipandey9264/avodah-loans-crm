@@ -1,36 +1,36 @@
-# AvodahLoans — loan search & comparison site + staff CRM
+# AvodahLoans — staff CRM
 
 ```
-frontend/   Public site: React 19 + Vite + Tailwind CSS v4 + React Router, GSAP + Lenis
 crm/        Staff CRM: React 19 + Vite + Tailwind CSS v4 + React Router + TanStack Query
-backend/    Node + Express + PostgreSQL (Drizzle ORM) API for both: lenders, offers, customer OTP login, lead forms, CRM auth & RBAC
+backend/    Node + Express + PostgreSQL (Drizzle ORM) API: CRM auth & RBAC, leads, customers, applications, lenders, follow-ups, reports
 ```
+
+The public website (search, offers, customer OTP login, lead forms) was removed from this repo; it's in the git history if you need it. Customers, leads and applications it created stay in the database and show in the CRM as before.
 
 ```bash
-npm run install:all   # installs all three
+npm run install:all   # installs backend and CRM
 npm --prefix backend run seed   # creates the tables (migrations) and loads the lender catalogue into PostgreSQL (safe to re-run)
 npm run dev:backend   # API on http://localhost:4000   (terminal 1)
-npm run dev:frontend  # site on http://localhost:5173  (terminal 2) — /api is proxied to the backend
-npm run dev:crm       # CRM on http://localhost:5174   (terminal 3) — /api is proxied to the backend
-npm run build         # builds frontend/dist   (npm run build:crm builds crm/dist)
+npm run dev:crm       # CRM on http://localhost:5174   (terminal 2) — /api is proxied to the backend
+npm run build:crm     # builds crm/dist
 npm test              # backend tests — run on a throwaway in-memory PostgreSQL, never on your database
 ```
 
 Needs **Node 22.12 or newer** (tested on Node 24).
 
-Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATABASE_URL` (PostgreSQL connection string — hosted databases need `?sslmode=require`), `PORT`, `CORS_ORIGIN`, `OTP_DEMO`, `TURNSTILE_SECRET_KEY`, `TRUST_PROXY`, `NODE_ENV`, and for the CRM `CRM_URL`, `CRM_IDLE_MINUTES`, `CRM_SESSION_HOURS`, `CRM_TIMEZONE`.
+Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATABASE_URL` (PostgreSQL connection string — hosted databases need `?sslmode=require`), `PORT`, `CORS_ORIGIN`, `TRUST_PROXY`, `NODE_ENV`, `CRM_URL`, `CRM_IDLE_MINUTES`, `CRM_SESSION_HOURS`, `CRM_TIMEZONE`.
 
 ### Local setup, step by step
 1. `npm run install:all`
 2. Copy `backend/.env.example` to `backend/.env` and set `DATABASE_URL` (your Neon connection string, or a local PostgreSQL). **Never commit `.env`.**
 3. `npm --prefix backend run seed` — runs all migrations and loads the lender catalogue. (The API also runs pending migrations every time it starts.)
 4. `npm --prefix backend run crm:admin -- you@company.com "Your Name"` — your first CRM login (prints a one-time password).
-5. Start the three dev servers (commands above) and open the CRM at http://localhost:5174.
+5. Start the two dev servers (commands above) and open the CRM at http://localhost:5174.
 6. `npm test` — the backend test suite, on a throwaway in-memory database.
 
 ## CRM sign-in, roles and security
 - **First admin:** `npm --prefix backend run crm:admin -- you@company.com "Your Name"` creates an Admin and prints a one-time password (or set `CRM_ADMIN_PASSWORD` first). Add everyone else in the CRM under **Security & Settings → Users** — by invite link or with a password.
-- **Staff are rows in `users`** with a `role_id` and a `password_hash` (scrypt). Customers have no role and keep signing in to the website with OTP. Staff sessions live in `sessions` with `kind = 'staff'`; a customer OTP session can never open the CRM API, even for a staff email.
+- **Staff are rows in `users`** with a `role_id` and a `password_hash` (scrypt). Customers have no role and can't sign in to the CRM. Staff sessions live in `sessions` with `kind = 'staff'`; any other session (e.g. a customer session left over from the old website) is ignored.
 - **Roles** (`roles` table, built-ins inserted on start): Admin, Branch Manager, Credit Analyst, Sales Executive, Telecaller, Viewer. Permissions are `module.action` strings defined in `backend/src/crm/permissions.js`; every CRM route checks one with `can("…")`. A user can only create, edit or sign out users whose role ranks below theirs; Admin, the top role, manages everyone including other admins. (The former Super Admin role was removed in migration `0008`; its accounts became Admins.)
 - **Protection:** 5 wrong passwords lock an account for 15 minutes; sign-in, forgot and reset are rate-limited per IP; sessions end after `CRM_IDLE_MINUTES` idle or `CRM_SESSION_HOURS` total; role changes, suspensions and password resets sign the user out everywhere.
 - **Forgot password:** single-use links stored hashed in `otps` (identifier `reset:<user id>`), valid 30 minutes (invites 72 hours). No email provider is wired in yet: in development the link is printed in the backend console; wire your provider in `backend/src/lib/mailer.js` before production.
@@ -140,7 +140,7 @@ Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATA
 | `GET reports/export?tab=sales\|team\|lenders\|products\|cities&from=&to=` | `reports.export` |
 
 ## CRM settings, notifications and quick add
-- **Settings → General** (`app_settings` table, migration `0007`): company name, CRM notification email, how new website leads are assigned (manual pool, or automatically to the active sales executive with the fewest open leads), and how early follow-up reminders appear. Admins only; every change is audited with before/after values.
+- **Settings → General** (`app_settings` table, migration `0007`): company name, CRM notification email, how new website leads are assigned (manual pool, or automatically to the active sales executive with the fewest open leads; no effect while there is no public website sending leads), and how early follow-up reminders appear. Admins only; every change is audited with before/after values.
 - **Settings → Notifications:** each user switches bell items on or off (new leads, applications, follow-up reminders, security alerts); stored in `users.profile.notificationPrefs`.
 - **Quick add** (top bar, every page): new lead, customer, application or follow-up — the same forms as the modules, filtered by the user's permissions.
 - Roles & permissions, Users, Audit logs and Security are described under "CRM sign-in, roles and security" above.
@@ -164,65 +164,26 @@ Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATA
 - `npm --prefix backend run db:studio` opens Drizzle Studio to browse the data.
 - Expired OTPs and sessions are deleted every 30 minutes (PostgreSQL has no TTL indexes).
 
-## API (`backend/src/routes/`)
-| Method & path | What it does |
-|---|---|
-| `GET /api/loan-types`, `/api/employment-types` | Product + employment lists |
-| `GET /api/lenders?kind=&type=` | Lender directory |
-| `GET /api/lenders/:id` | One lender + prev/next, eligibility, documents |
-| `GET /api/offers?type=&amount=&tenure=&income=` | Matched offers with EMI + eligibility (FOIR 50%) |
-| `POST /api/emi` | EMI, total payment, total interest |
-| `POST /api/auth/otp`, `/api/auth/verify` | Mobile OTP login → bearer token (`OTP_DEMO=true` accepts any 6 digits) |
-| `GET /api/auth/me`, `POST /api/auth/logout` | Session |
-| `GET/PUT /api/me/activity`, `POST /api/me/activity/:list`, `PATCH /api/me/profile` | Dashboard data (login required) |
-| `POST/GET /api/applications` | Apply to an offer / list my applications |
-| `POST /api/leads/callback`, `/api/leads/credit-report` | Public lead forms |
-
-The frontend client for all of these is `frontend/src/lib/api.js`. The pages still use the local `lib/` modules; switch them to `api.*` calls page by page.
-
-## Pages
-| Route | What it does |
-|---|---|
-| `/` | Home: hero search widget (7 loan types), stats, loan products, lender strip, how-it-works, EMI calculator, FAQ |
-| `/search?type=home` | Step flow: loan type → employment type → details (amount, tenure, pincode, annual income) |
-| `/offers?...` | Matching animation, then lender offers: sort, filter sheet (rate of interest / lender type / lenders), save, compare (up to 3), show details, apply |
-| `/dashboard` | Logged-in dashboard: overview tiles, applications + status, saved offers, search history, requests, profile |
-| `/lenders` | Directory of all lenders, filterable by PVT Bank / PSU Bank / HFC / NBFC |
-| `/lenders/:id` | One page per lender: rates per loan type, EMI estimate, rate card, eligibility, documents, previous/next lender |
-| `/login` | Mobile + OTP login (demo — any 6 digits) |
-| `/emi-calculator` | EMI calculator + formula |
-| `/credit-score` | Interactive score gauge + free report request form |
-| `/support` | Searchable help centre, contact options, callback form |
-
-Every step lives in the URL, so the browser back button and shared links work.
-
 ## Where things live
-- `frontend/src/lib/loans.js` – loan types, employment types, **lender catalogue and offer matching** (`getOffers`)
-- `frontend/src/lib/content.js` – marketing copy, FAQs, testimonials, contact details
-- `frontend/src/lib/auth.jsx` – front-end-only session (replace with real OTP auth)
-- `frontend/src/lib/activity.js` – per-user activity log behind the dashboard (stored in this browser; replace with API)
-- `frontend/src/lib/motion.js` – GSAP + Lenis setup; `src/lib/emi.js` – EMI maths
-- `frontend/src/pages/` – one file per route; `src/components/` – shared sections
+- `backend/src/routes/crm/` – one file per CRM module; `backend/src/crm/` – their shared rules (permissions, leads, applications, customers, audit)
+- `backend/src/data/loans.js` – loan types, employment types and the sample lender catalogue (`npm run seed`)
+- `crm/src/pages/` – one folder per module; `crm/src/lib/` – API client, labels, formatting
+- `crm/public/bank-logos/` – lender logos (a lender's `logo` is a path like `/bank-logos/sbi.png`)
 
 ## Production deployment
-The API (`backend/`, a Node process), the website (`frontend/dist`) and the CRM (`crm/dist`, both static files) deploy separately.
+The API (`backend/`, a Node process) and the CRM (`crm/dist`, static files) deploy separately.
 
 1. **Database (Neon):** use the connection string with `?sslmode=require` as `DATABASE_URL`. Migrations run automatically when the API starts (or run `npm --prefix backend run db:migrate`); they only add tables, columns and constraints. Create a Neon branch (backup) before deploying a new version.
 2. **API:** on any Node 22.12+ host (Render, Railway, a VM…): `npm --prefix backend ci --omit=dev`, then `npm --prefix backend start`. Set these in the host's environment settings, never in a committed file:
-   - `NODE_ENV=production` — demo OTP is then impossible (no any-code login) and reset links stay out of logs
+   - `NODE_ENV=production` — reset links stay out of logs
    - `DATABASE_URL`; `PORT` if the host requires it; `TRUST_PROXY=1` behind the host's load balancer
-   - `CORS_ORIGIN=https://www.yoursite.in,https://crm.yoursite.in` (both front-end origins)
+   - `CORS_ORIGIN=https://crm.yoursite.in` (the CRM's origin)
    - `CRM_URL=https://crm.yoursite.in` (invite and reset links), `CRM_TIMEZONE=Asia/Kolkata`, `CRM_IDLE_MINUTES`, `CRM_SESSION_HOURS`
-   - `TURNSTILE_SECRET_KEY` — your real Cloudflare Turnstile secret (the example value is Cloudflare's always-pass test key)
    - Health check: `GET /api/health` returns `{ "ok": true, "db": true }`.
 3. **First admin:** run `npm --prefix backend run crm:admin -- you@company.com "Your Name"` once against the production database.
-4. **Website and CRM:** `npm run build` and `npm run build:crm` with `VITE_API_URL=https://api.yoursite.in` set at build time (plus `VITE_TURNSTILE_SITE_KEY` for the website and `VITE_SITE_URL` for the CRM). Host `frontend/dist` and `crm/dist` on any static host (Netlify, Vercel, Cloudflare Pages, S3 + CloudFront) with a single-page-app fallback (unknown paths serve `index.html`), over HTTPS.
-5. **Smoke test:** sign in to the CRM, open each module, submit a callback request on the website and check it appears under Leads.
+4. **CRM:** `npm run build:crm` with `VITE_API_URL=https://api.yoursite.in` set at build time (optionally `VITE_SITE_URL` for the sidebar's website link). Host `crm/dist` on any static host (Render Static Site, Netlify, Vercel, Cloudflare Pages) with a single-page-app fallback (unknown paths serve `index.html`), over HTTPS.
+5. **Smoke test:** sign in to the CRM and open each module.
 
 ## Before launch
-- **SMS OTP provider (blocks website sign-in in production):** with `NODE_ENV=production` the website's OTP login no longer accepts demo codes, and real codes are not sent anywhere yet — wire an SMS/email provider at the `TODO` in `backend/src/routes/auth.js`.
 - **Email provider:** CRM invites and password resets are not emailed in production until a provider is wired into `backend/src/lib/mailer.js`. Until then, set a password when adding a user.
-- Lender rates, limits and features in `loans.js` are **sample data** — replace with live data from the API.
-- Phone/email in `CONTACT` are placeholders from the reference repo.
-- Login OTP, eligibility, credit report, callback and "Apply" are simulated on the front end — wire them to the backend.
-- The hero photo is hot-linked from Unsplash; download it into `public/` (or use your own) for production.
+- Lender rates, limits and features in `backend/src/data/loans.js` are **sample data** — edit lenders in the CRM, or replace the catalogue before seeding.

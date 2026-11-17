@@ -1,6 +1,7 @@
 // CRM authentication, sessions, RBAC and audit logging — against a real server and a throwaway PostgreSQL.
 // Run: npm test   (from backend/)
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { startStack } from "./harness.js";
 
@@ -17,6 +18,8 @@ const tokenFor = async (email, password = PW) => {
 const createUser = async (token, user) => s.api("/crm/users", { method: "POST", token, body: { password: PW, ...user } });
 const auditActions = async (token, query = "") =>
   (await s.api(`/crm/audit-logs?pageSize=100${query}`, { token })).body.logs.map((l) => l.action);
+// A customer row as the old public website created it (no role, no password).
+const customer = async (email) => (await s.pg.query(`insert into users (email) values ($1) returning id`, [email])).rows[0].id;
 
 let owner; // admin token (from the crm-admin script)
 const ids = {};
@@ -34,16 +37,11 @@ before(async () => {
 });
 after(() => s?.stop());
 
-describe("existing website API still works", () => {
-  test("health, lender list and customer OTP login", async () => {
+describe("API basics", () => {
+  test("health check, and the removed public website routes are gone", async () => {
     assert.deepEqual((await s.api("/health")).body, { ok: true, db: true });
-    assert.equal((await s.api("/lenders")).status, 200);
-    const otp = await s.api("/auth/otp", { method: "POST", body: { phone: "9876543210" } });
-    assert.equal(otp.status, 200);
-    const verify = await s.api("/auth/verify", { method: "POST", body: { phone: "9876543210", otp: otp.body.devOtp } });
-    assert.equal(verify.status, 200);
-    assert.equal((await s.api("/auth/me", { token: verify.body.token })).status, 200);
-    assert.equal((await s.api("/me/activity", { token: verify.body.token })).status, 200);
+    assert.equal((await s.api("/lenders")).status, 404);
+    assert.equal((await s.api("/auth/otp", { method: "POST", body: { phone: "9876543210" } })).status, 404);
   });
 });
 
@@ -93,22 +91,17 @@ describe("login and logout", () => {
 });
 
 describe("customer and staff sessions are kept apart", () => {
-  test("a customer OTP token can't open the CRM, and a staff token can't act as a customer", async () => {
-    // Customer OTP login with a staff member's email (OTP_DEMO accepts any code) must not reach the CRM.
-    const otp = await s.api("/auth/otp", { method: "POST", body: { email: "employee@avodah.test" } });
-    const cust = await s.api("/auth/verify", { method: "POST", body: { email: "employee@avodah.test", otp: otp.body.devOtp } });
-    assert.equal(cust.status, 200);
-    assert.equal((await s.api("/crm/auth/me", { token: cust.body.token })).status, 401);
-    assert.equal((await s.api("/crm/users", { token: cust.body.token })).status, 401);
-
-    const staff = await tokenFor("employee@avodah.test");
-    assert.equal((await s.api("/auth/me", { token: staff })).status, 401);
-    assert.equal((await s.api("/me/activity", { token: staff })).status, 401);
+  test("a customer session can't open the CRM, even on a staff member's account", async () => {
+    // Customer sessions (left over from the old website) must never reach the CRM.
+    const token = "customer-session-token";
+    await s.pg.query(`insert into sessions (token_hash, user_id, kind, expires_at) values ($1, $2, 'customer', now() + interval '1 day')`,
+      [createHash("sha256").update(token).digest("hex"), ids.employee]);
+    assert.equal((await s.api("/crm/auth/me", { token })).status, 401);
+    assert.equal((await s.api("/crm/users", { token })).status, 401);
   });
 
   test("a website customer can't sign in to the CRM or appear in its user list", async () => {
-    const otp = await s.api("/auth/otp", { method: "POST", body: { email: "buyer@example.com" } });
-    await s.api("/auth/verify", { method: "POST", body: { email: "buyer@example.com", otp: otp.body.devOtp } });
+    await customer("buyer@example.com");
     assert.equal((await login("buyer@example.com", "Anything-123")).status, 401);
     assert.equal((await s.api("/crm/users?q=buyer@example.com", { token: owner })).body.total, 0);
   });
@@ -159,8 +152,7 @@ describe("role-based access control (checked on the backend)", () => {
 
   test("duplicate emails are refused, including a website customer's", async () => {
     assert.equal((await createUser(owner, { name: "Dup Person", email: "viewer@avodah.test", roleId: "viewer" })).status, 409);
-    const otp = await s.api("/auth/otp", { method: "POST", body: { email: "shopper@example.com" } });
-    await s.api("/auth/verify", { method: "POST", body: { email: "shopper@example.com", otp: otp.body.devOtp } });
+    await customer("shopper@example.com");
     const res = await createUser(owner, { name: "Shopper Person", email: "shopper@example.com", roleId: "viewer" });
     assert.equal(res.status, 409);
     assert.match(res.body.error, /customer/);
