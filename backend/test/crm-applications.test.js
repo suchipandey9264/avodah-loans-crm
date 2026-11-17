@@ -194,15 +194,6 @@ describe("entry points and links", () => {
     assert.deepEqual([d.application.stage, d.application.assigneeName, d.application.leadRef], ["login", "Imran Sheikh", lead.ref]);
   });
 
-  test("a website application arrives as New and unassigned", async () => {
-    const otp = await s.api("/auth/otp", { method: "POST", body: { phone: "9456789012" } });
-    const tok = (await s.api("/auth/verify", { method: "POST", body: { phone: "9456789012", otp: otp.body.devOtp, name: "Web Buyer" } })).body.token;
-    const web = await s.api("/applications", { method: "POST", token: tok, body: { id: "hdfc", name: "HDFC", type: "personal", loanAmount: 300000, tenureMonths: 24, rate: 10.5 } });
-    assert.equal(web.status, 201);
-    const found = (await api("emp2", `/crm/applications?q=${web.body.ref}`)).body.applications[0];
-    assert.deepEqual([found.stage, found.assignedTo, found.customerName], ["new", null, "Web Buyer"]);
-  });
-
   test("documents can only be attached to the customer's own applications", async () => {
     const other = (await api("emp", "/crm/customers", { method: "POST", body: { name: "Other Person", phone: "9567890123" } })).body.customer;
     const up = await upload("emp", other.id, "pan", id.app);

@@ -329,8 +329,7 @@ describe("convert to customer + application", () => {
 
   test("an existing website customer with the same phone is reused, not duplicated", async () => {
     const p = phone();
-    const otp = await s.api("/auth/otp", { method: "POST", body: { phone: p } });
-    await s.api("/auth/verify", { method: "POST", body: { phone: p, otp: otp.body.devOtp, name: "Web Customer" } });
+    await s.pg.query(`insert into users (phone, name) values ($1, 'Web Customer')`, [p]);
     const lead = (await create("owner", { name: "Web Customer Lead", phone: p, ownerId: id.emp1 })).body.lead;
     await patch("emp1", lead.id, { status: "docs_pending" });
     const res = await convert("emp1", lead.id);
@@ -357,16 +356,5 @@ describe("convert to customer + application", () => {
     assert.match(logs[0].meta.application, /^AVD/);
     const dash = (await api("owner", "/crm/dashboard")).body;
     assert.ok(dash.statuses.total >= 3);
-  });
-});
-
-describe("website leads join the pipeline", () => {
-  test("a website callback becomes a New lead with an L- reference in the unassigned pool", async () => {
-    const p = phone();
-    assert.equal((await s.api("/leads/callback", { method: "POST", body: { name: "Web Visitor", phone: p } })).status, 201);
-    const found = (await list("tele", { q: p })).body.leads;
-    assert.equal(found.length, 1);
-    assert.deepEqual([found[0].status, found[0].source, found[0].kind, found[0].ownerId], ["new", "website", "callback", null]);
-    assert.match(found[0].ref, /^L-/);
   });
 });

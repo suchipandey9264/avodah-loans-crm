@@ -3,7 +3,7 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 
-  /* Brand purple — shared with the public site (frontend/src/index.css) */
+  /* Brand purple */
   --color-brand-50: #f6f3fd;
   --color-brand-100: #ece6fa;
   --color-brand-200: #d6c9f4;

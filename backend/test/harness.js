@@ -29,8 +29,6 @@ export async function startStack(envOverrides = {}) {
     DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${dbPort}/postgres`,
     PG_POOL_MAX: "1", // PGlite is a single session; one connection keeps transactions isolated
     NODE_ENV: "test",
-    OTP_DEMO: "true",
-    TURNSTILE_SECRET_KEY: "",
     TRUST_PROXY: "1", // lets each test request pick its own client IP via X-Forwarded-For
     CRM_URL: "http://crm.test",
     ...envOverrides,

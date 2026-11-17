@@ -51,9 +51,10 @@ r.get("/notifications", requireStaff, async (req, res) => {
   const since = new Date(Date.now() - NOTIFY_DAYS * 86400000);
   const soon = new Date(Date.now() + (await getGeneral()).followupReminderMinutes * 60000);
   const [leads, applications, locks, reminders] = await Promise.all([
+    // handled: the old app marks leads handled without changing status. (No SQL `--` comment here: it would swallow the scope clause.)
     prefs.leads && has("leads.view")
       ? rows(sql`select id, kind, name, created_at as "createdAt" from leads
-                 where status = 'new' and handled = false and deleted_at is null -- handled: the old app marks leads handled without changing status and ${leadScopeSql(req.staff)}
+                 where status = 'new' and handled = false and deleted_at is null and ${leadScopeSql(req.staff)}
                    and created_at >= ${since} order by created_at desc limit 10`)
       : [],
     prefs.applications && has("applications.view")
@@ -75,7 +76,7 @@ r.get("/notifications", requireStaff, async (req, res) => {
   ]);
   const now = new Date();
   const items = [
-    ...leads.map((l) => ({ id: `lead:${l.id}`, leadId: l.id, type: "lead", title: l.kind === "callback" ? "New callback request" : "New credit report request", body: l.name, createdAt: l.createdAt })),
+    ...leads.map((l) => ({ id: `lead:${l.id}`, leadId: l.id, type: "lead", title: { callback: "New callback request", "credit-report": "New credit report request" }[l.kind] ?? "New lead", body: l.name, createdAt: l.createdAt })),
     ...applications.map((x) => ({ id: `application:${x.id}`, type: "application", title: "New application to review", body: `${x.name ?? "Customer"} · ${typeLabel(x.type)} · ${x.lenderName ?? ""} (${x.ref})`, createdAt: x.createdAt })),
     ...reminders.map((x) => {
       const overdue = new Date(x.dueAt) < now;
