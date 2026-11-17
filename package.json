@@ -1,0 +1,14 @@
+{
+  "name": "avodahloans",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix frontend install && npm --prefix backend install && npm --prefix crm install",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:crm": "npm --prefix crm run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "build:crm": "npm --prefix crm run build",
+    "test": "npm --prefix backend test",
+    "start": "npm --prefix backend start"
+  }
+}

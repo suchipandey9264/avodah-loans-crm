@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand purple — shared with the public site (frontend/src/index.css) */
+  --color-brand-50: #f6f3fd;
+  --color-brand-100: #ece6fa;
+  --color-brand-200: #d6c9f4;
+  --color-brand-300: #b39de8;
+  --color-brand-500: #6d3fd0;
+  --color-brand-600: #5a2db3;
+  --color-brand-700: #46208d;
+  --color-brand-800: #351671;
+  --color-brand-900: #241052;
+
+  /* Sidebar night */
+  --color-night: #150a33;
+  --color-night-soft: #241a48;
+  --color-night-text: #c9c2e0;
+  --color-night-label: #8a7fb5;
+
+  /* Accent */
+  --color-flame-50: #fff7ed;
+  --color-flame-500: #f97316;
+  --color-flame-600: #c2410c;
+
+  /* Surfaces & text */
+  --color-canvas: #f6f5fa;
+  --color-ink: #1a0f33;
+  --color-muted: #625c78;
+  --color-line: #e7e3f0;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

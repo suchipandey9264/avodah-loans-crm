@@ -1,0 +1,10 @@
+node_modules
+dist
+.vite
+*.local
+.env
+backend/data/
+.env.*
+!.env.example
+.impeccable/
+graphify-out/
