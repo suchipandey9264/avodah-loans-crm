@@ -56,10 +56,10 @@ export default function ForgotPassword() {
   }
 
   return (
-    <AuthLayout title="Reset your password" subtitle="Enter your work email and we’ll send you a link to set a new password.">
+    <AuthLayout title="Reset your password" subtitle="Enter your email and we’ll send you a link to set a new password.">
       <form onSubmit={submit} noValidate className="space-y-5">
         {formError && <Alert>{formError}</Alert>}
-        <Field label="Work email" error={error}>
+        <Field label="Email" error={error}>
           {(a) => <Input {...a} type="email" autoComplete="username" inputMode="email" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />}
         </Field>
         <Button type="submit" loading={busy} className="w-full">

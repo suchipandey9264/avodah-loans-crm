@@ -128,7 +128,10 @@ r.patch("/users/:id", can("users.edit", "employees.edit"), async (req, res) => {
   const signedOut = changes.roleId || changes.status === "suspended" ? await revokeStaffSessions(user.id) : 0;
 
   if (changes.roleId) await audit(req, "user.role_changed", { entityType: "user", entityId: user.id, meta: { from: role.id, to: newRole.id } });
-  if (changes.status) await audit(req, changes.status === "suspended" ? "user.suspended" : "user.reactivated", { entityType: "user", entityId: user.id });
+  if (changes.status) {
+    const action = changes.status === "suspended" ? "user.suspended" : user.status === "pending" ? "user.approved" : "user.reactivated";
+    await audit(req, action, { entityType: "user", entityId: user.id });
+  }
   if (changes.name !== undefined || changes.phone !== undefined || work.length) {
     await audit(req, "user.updated", { entityType: "user", entityId: user.id, meta: { fields: [...Object.keys(changes).filter((k) => k === "name" || k === "phone"), ...work] } });
   }

@@ -62,7 +62,7 @@ async function loadStaff(id) {
 r.get("/employees", can("employees.view"), async (req, res) => {
   const f = parse(employeeListQuery, req.query);
   const like = f.q && `%${f.q.replace(/[\\%_]/g, "\\$&")}%`;
-  const w = [sql`true`];
+  const w = [sql`u.status <> 'pending'`]; // sign-ups waiting for approval aren't on the team yet
   if (like) w.push(sql`(u.name ilike ${like} or u.email ilike ${like} or u.phone ilike ${like})`);
   if (f.role) w.push(sql`u.role_id = ${f.role}`);
   if (f.branch) w.push(sql`u.profile->>'branch' = ${f.branch}`);
@@ -75,7 +75,7 @@ r.get("/employees", can("employees.view"), async (req, res) => {
       coalesce(sum((u.profile->>'monthlyTarget')::float8) filter (where u.status = 'active'), 0)::float8 as target,
       (select coalesce(sum(disbursed_amount), 0)::float8 from applications where stage = 'disbursed' and disbursed_at >= ${monthStart}) as achieved,
       (select count(*)::int from leads where owner_id is null and deleted_at is null and status in (${open})) as unassigned
-      from users u where u.role_id is not null`),
+      from users u where u.role_id is not null and u.status <> 'pending'`),
     rows(sql`select distinct profile->>'branch' as b from users where role_id is not null and coalesce(profile->>'branch', '') <> '' order by 1`),
     db.select({ id: roles.id, name: roles.name, rank: roles.rank }).from(roles),
   ]);

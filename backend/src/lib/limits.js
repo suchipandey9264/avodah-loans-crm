@@ -33,5 +33,8 @@ export const crmLoginLimiter = limiter({ minutes: 15, limit: 20, message: "Too m
 /** CRM forgot-password requests, per IP. */
 export const crmForgotLimiter = limiter({ minutes: 60, limit: 5, message: "Too many reset requests — please try again in an hour." });
 
+/** CRM sign-up requests, per IP. */
+export const crmSignupLimiter = limiter({ minutes: 60, limit: 5, message: "Too many sign-up requests — please try again in an hour." });
+
 /** CRM reset-password submissions, per IP. */
 export const crmResetLimiter = limiter({ minutes: 15, limit: 10, message: "Too many attempts — please wait 15 minutes and try again." });

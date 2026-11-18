@@ -10,15 +10,16 @@ The public website (search, offers, customer OTP login, lead forms) was removed 
 ```bash
 npm run install:all   # installs backend and CRM
 npm --prefix backend run seed   # creates the tables (migrations) and loads the lender catalogue into PostgreSQL (safe to re-run)
-npm run dev:backend   # API on http://localhost:4000   (terminal 1)
-npm run dev:crm       # CRM on http://localhost:5174   (terminal 2) — /api is proxied to the backend
+npm run dev           # API on http://localhost:4000 + CRM on http://localhost:5174, together (Ctrl+C stops both)
+npm run dev:backend   # or start them separately: API only
+npm run dev:crm       #                           CRM only — /api is proxied to the backend
 npm run build:crm     # builds crm/dist
 npm test              # backend tests — run on a throwaway in-memory PostgreSQL, never on your database
 ```
 
 Needs **Node 22.12 or newer** (tested on Node 24).
 
-Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATABASE_URL` (PostgreSQL connection string — hosted databases need `?sslmode=require`), `PORT`, `CORS_ORIGIN`, `TRUST_PROXY`, `NODE_ENV`, `CRM_URL`, `CRM_IDLE_MINUTES`, `CRM_SESSION_HOURS`, `CRM_TIMEZONE`.
+Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATABASE_URL` (PostgreSQL connection string — hosted databases need `?sslmode=verify-full`), `PORT`, `CORS_ORIGIN`, `TRUST_PROXY`, `NODE_ENV`, `CRM_URL`, `CRM_IDLE_MINUTES`, `CRM_SESSION_HOURS`, `CRM_TIMEZONE`.
 
 ### Local setup, step by step
 1. `npm run install:all`
@@ -173,7 +174,7 @@ Backend config lives in `backend/.env` (copy from `backend/.env.example`): `DATA
 ## Production deployment
 The API (`backend/`, a Node process) and the CRM (`crm/dist`, static files) deploy separately.
 
-1. **Database (Neon):** use the connection string with `?sslmode=require` as `DATABASE_URL`. Migrations run automatically when the API starts (or run `npm --prefix backend run db:migrate`); they only add tables, columns and constraints. Create a Neon branch (backup) before deploying a new version.
+1. **Database (Neon):** use the connection string with `?sslmode=verify-full` as `DATABASE_URL`. Migrations run automatically when the API starts (or run `npm --prefix backend run db:migrate`); they only add tables, columns and constraints. Create a Neon branch (backup) before deploying a new version.
 2. **API:** on any Node 22.12+ host (Render, Railway, a VM…): `npm --prefix backend ci --omit=dev`, then `npm --prefix backend start`. Set these in the host's environment settings, never in a committed file:
    - `NODE_ENV=production` — reset links stay out of logs
    - `DATABASE_URL`; `PORT` if the host requires it; `TRUST_PROXY=1` behind the host's load balancer

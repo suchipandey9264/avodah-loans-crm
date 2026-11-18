@@ -35,8 +35,9 @@ export const createUserBody = z.object({
   roleId,
   password: newPassword.optional(), // omitted: the user gets an invite link to set their own
 });
+export const signupBody = z.object({ name: personName, email, password: newPassword });
 export const updateUserBody = z
-  .object({ name: personName, phone: phone.nullable(), roleId, status: z.enum(USER_STATUSES), ...employeeProfile })
+  .object({ name: personName, phone: phone.nullable(), roleId, status: z.enum(["active", "suspended"]), ...employeeProfile })
   .partial()
   .refine((b) => Object.keys(b).length > 0, "Nothing to update");
 

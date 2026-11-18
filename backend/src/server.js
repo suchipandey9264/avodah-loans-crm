@@ -23,6 +23,9 @@ app.use(express.json({ limit: "100kb" }));
 app.use("/api/crm", crmLimiter);
 app.use(session);
 
+// The API has no pages: send anyone who opens its address to the CRM.
+app.get("/", (_req, res) => res.redirect(process.env.CRM_URL ?? "http://localhost:5174"));
+
 app.get("/api/health", async (_req, res) => {
   const db = await pool.query("select 1").then(() => true, () => false);
   res.json({ ok: true, db });

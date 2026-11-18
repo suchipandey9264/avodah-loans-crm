@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm --prefix backend install && npm --prefix crm install",
+    "dev": "node dev.mjs",
     "dev:crm": "npm --prefix crm run dev",
     "dev:backend": "npm --prefix backend run dev",
     "build:crm": "npm --prefix crm run build",

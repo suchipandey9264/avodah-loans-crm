@@ -10,6 +10,7 @@ import NotFound from "./pages/NotFound";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Login from "./pages/auth/Login";
 import ResetPassword from "./pages/auth/ResetPassword";
+import Signup from "./pages/auth/Signup";
 import SettingsLayout from "./pages/settings/SettingsLayout";
 
 // Bigger pages load on demand (AppShell shows a spinner meanwhile).
@@ -44,6 +45,7 @@ export default function App() {
       <Route element={<GuestOnly />}>
         <Route path="login" element={<Login />} />
         <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="signup" element={<Signup />} />
       </Route>
       {/* Reachable signed in or out: a reset link must work either way. */}
       <Route path="reset-password" element={<ResetPassword />} />
