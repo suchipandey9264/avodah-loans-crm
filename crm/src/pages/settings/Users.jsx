@@ -13,6 +13,7 @@ import { check, email, newPassword, personName, phone, PASSWORD_RULES } from "..
 const PAGE_SIZE = 25;
 
 function StatusBadge({ user }) {
+  if (user.status === "pending") return <Badge tone="orange" dot>Waiting for approval</Badge>;
   if (user.status === "suspended") return <Badge tone="red" dot>Suspended</Badge>;
   if (user.locked) return <Badge tone="amber" dot>Locked</Badge>;
   if (!user.lastLoginAt) return <Badge tone="purple" dot>Never signed in</Badge>;
@@ -51,13 +52,15 @@ export default function Users() {
 
   const update = useMutation({
     mutationFn: ({ id, patch }) => api.updateUser(id, patch),
-    onSuccess: ({ user, sessionsSignedOut }, { patch }) =>
+    onSuccess: ({ user, sessionsSignedOut }, { patch, signup }) =>
       done(
         patch.roleId
           ? `${user.name} is now ${user.role.name}.${sessionsSignedOut ? " They’ve been signed out to pick up the new access." : ""}`
-          : patch.status === "suspended"
-            ? `${user.name} is suspended and signed out.`
-            : `${user.name} is active again.`
+          : signup
+            ? patch.status === "active" ? `${user.name} is approved and can sign in now as ${user.role.name}.` : `${user.name}’s sign-up was declined.`
+            : patch.status === "suspended"
+              ? `${user.name} is suspended and signed out.`
+              : `${user.name} is active again.`
       ),
     onError: failed,
   });
@@ -68,6 +71,18 @@ export default function Users() {
     const self = u.id === me.id;
     const allowed = canEdit && (self || manageable(u.role.rank));
     if (!allowed) return null;
+    if (u.status === "pending") {
+      return (
+        <div className="flex flex-wrap justify-end gap-1">
+          <Button variant="ghost" size="sm" onClick={() => setConfirm({ title: `Approve ${u.name}?`, body: `${u.email} will be able to sign in as ${u.role.name}. To give more access, change their role first.`, label: "Approve", run: () => update.mutate({ id: u.id, patch: { status: "active" }, signup: true }) })}>
+            Approve
+          </Button>
+          <Button variant="ghost" size="sm" className="text-red-700 hover:bg-red-50" onClick={() => setConfirm({ title: `Decline ${u.name}?`, body: "They won’t be able to sign in. The request stays in the list as suspended.", label: "Decline", danger: true, run: () => update.mutate({ id: u.id, patch: { status: "suspended" }, signup: true }) })}>
+            Decline
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-wrap justify-end gap-1">
         {u.status === "active" && (
@@ -132,6 +147,7 @@ export default function Users() {
           </Select>
           <Select aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option>
+            <option value="pending">Waiting for approval</option>
             <option value="active">Active</option>
             <option value="suspended">Suspended</option>
           </Select>

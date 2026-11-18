@@ -59,7 +59,7 @@ export const roles = pgTable("roles", {
   updatedAt,
 });
 
-export const USER_STATUSES = ["active", "suspended"];
+export const USER_STATUSES = ["active", "suspended", "pending"]; // pending: signed up on the CRM, waiting for an admin
 export const KYC_STATUSES = ["pending", "verified", "re_kyc"];
 export const customerCodeSeq = pgSequence("customer_code_seq", { startWith: 5001 });
 

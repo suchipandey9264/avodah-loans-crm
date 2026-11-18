@@ -40,6 +40,8 @@ after(() => s?.stop());
 describe("API basics", () => {
   test("health check, and the removed public website routes are gone", async () => {
     assert.deepEqual((await s.api("/health")).body, { ok: true, db: true });
+    const root = await fetch(s.base.replace(/\/api$/, "/"), { redirect: "manual" });
+    assert.deepEqual([root.status, root.headers.get("location")], [302, "http://crm.test"], "the API's address sends people to the CRM");
     assert.equal((await s.api("/lenders")).status, 404);
     assert.equal((await s.api("/auth/otp", { method: "POST", body: { phone: "9876543210" } })).status, 404);
   });
@@ -362,4 +364,32 @@ test("crm-admin script creates or resets an Admin", async () => {
   assert.match(out, /Created Admin: plain-admin@avodah\.test/);
   assert.match(await s.run(["src/scripts/crm-admin.js", "plain-admin@avodah.test"], { CRM_ADMIN_PASSWORD: "Plain-admin-2026" }), /Updated Admin/);
   assert.equal((await s.pg.query("select role_id from users where email = 'plain-admin@avodah.test'")).rows[0].role_id, "admin");
+});
+
+describe("self sign-up waits for an admin", () => {
+  test("a sign-up stays pending with no access until an admin approves it", async () => {
+    const body = { name: "New Person", email: "newbie@avodah.test", password: PW };
+    assert.equal((await s.api("/crm/auth/signup", { method: "POST", body })).status, 202);
+    const taken = await s.api("/crm/auth/signup", { method: "POST", body: { ...body, email: "viewer@avodah.test", password: "Other-pass-123" } });
+    assert.equal(taken.status, 202, "a taken email gets the same reply");
+    assert.equal((await login("viewer@avodah.test")).status, 200, "and the existing account is untouched");
+
+    const blocked = await login("newbie@avodah.test");
+    assert.equal(blocked.status, 403);
+    assert.match(blocked.body.error, /waiting for an administrator/);
+
+    const u = (await s.api("/crm/users?status=pending", { token: owner })).body.users.find((x) => x.email === "newbie@avodah.test");
+    assert.equal(u.role.id, "viewer");
+    assert.equal((await s.api("/crm/employees", { token: owner })).body.employees.some((e) => e.id === u.id), false, "not on the team yet");
+    assert.equal((await s.api(`/crm/users/${u.id}`, { method: "PATCH", token: owner, body: { status: "active" } })).status, 200);
+    assert.equal((await login("newbie@avodah.test")).status, 200);
+    assert.ok((await auditActions(owner, "&action=user.")).includes("user.approved"));
+  });
+
+  test("sign-up checks the details and an admin can't set pending by hand", async () => {
+    const bad = await s.api("/crm/auth/signup", { method: "POST", body: { name: "X", email: "nope", password: "short" } });
+    assert.equal(bad.status, 400);
+    for (const f of ["name", "email", "password"]) assert.ok(bad.body.fields[f], f);
+    assert.equal((await s.api(`/crm/users/${ids.viewer}`, { method: "PATCH", token: owner, body: { status: "pending" } })).status, 400);
+  });
 });

@@ -26,7 +26,7 @@ const MODULE = {
 
 const actorLabel = (log) => log.actorName ?? (log.actorEmail === "cli" ? "Server console" : log.actorEmail) ?? "Unknown";
 
-const REASONS = { wrong_password: "wrong password", unknown_account: "no such account", suspended: "account suspended" };
+const REASONS = { wrong_password: "wrong password", unknown_account: "no such account", suspended: "account suspended", pending: "waiting for approval" };
 
 /** Plain-English line for an audit entry. */
 function describe(log, roleName) {
@@ -48,6 +48,8 @@ function describe(log, roleName) {
     case "user.role_changed": return `Changed ${who}’s role from ${roleName(m.from)} to ${roleName(m.to)}`;
     case "user.suspended": return `Suspended ${who}`;
     case "user.reactivated": return `Reactivated ${who}`;
+    case "user.signup_requested": return `Signed up as ${m.email}, waiting for approval`;
+    case "user.approved": return `Approved ${who}’s sign-up`;
     case "user.updated": return `Updated ${who}’s ${(m.fields ?? []).join(" and ")}`;
     case "user.password_reset_sent": return `Sent a password reset link to ${who}`;
     case "user.sessions_revoked": return `Signed ${who} out of ${m.count} session${m.count === 1 ? "" : "s"}`;

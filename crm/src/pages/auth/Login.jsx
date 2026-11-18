@@ -39,12 +39,12 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout title="Sign in to the CRM" subtitle="Use the work email your administrator set up for you.">
+    <AuthLayout title="Sign in to the CRM" subtitle="Enter your email and password.">
       <form onSubmit={submit} noValidate className="space-y-5">
         {location.state?.reset && <Alert tone="success">Password updated. Sign in with your new password.</Alert>}
         {notice && !formError && <Alert tone="info">{notice}</Alert>}
         {formError && <Alert>{formError}</Alert>}
-        <Field label="Work email" error={errors.email}>
+        <Field label="Email" error={errors.email}>
           {(a) => <Input {...a} type="email" autoComplete="username" inputMode="email" value={values.email} onChange={set("email")} autoFocus />}
         </Field>
         <Field label="Password" error={errors.password}>
@@ -58,6 +58,10 @@ export default function Login() {
         <Button type="submit" loading={busy} className="w-full">
           Sign in
         </Button>
+        <p className="text-center text-sm text-muted">
+          New to the CRM?{" "}
+          <Link to="/signup" className="font-semibold text-brand-700 hover:underline">Create an account</Link>
+        </p>
       </form>
     </AuthLayout>
   );

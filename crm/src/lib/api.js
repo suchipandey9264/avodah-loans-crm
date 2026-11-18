@@ -60,6 +60,7 @@ export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/auth/me"),
+  signup: (body) => request("/auth/signup", { method: "POST", body }),
   forgot: (email) => request("/auth/forgot", { method: "POST", body: { email } }),
   reset: (uid, token, password) => request("/auth/reset", { method: "POST", body: { uid, token, password } }),
   changePassword: (currentPassword, newPassword) => request("/auth/password", { method: "POST", body: { currentPassword, newPassword } }),

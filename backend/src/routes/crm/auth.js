@@ -5,10 +5,10 @@ import { otps, roles, sessions, users } from "../../db/schema.js";
 import { issueResetLink, RESET_TTL_MS, resetKey, revokeStaffSessions, staffView } from "../../crm/accounts.js";
 import { audit, clientInfo } from "../../crm/audit.js";
 import { requireStaff } from "../../crm/middleware.js";
-import { changePasswordBody, forgotBody, loginBody, resetBody } from "../../crm/validate.js";
+import { changePasswordBody, forgotBody, loginBody, resetBody, signupBody } from "../../crm/validate.js";
 import { db } from "../../lib/db.js";
 import { HttpError, sha256, STAFF_IDLE_MS } from "../../lib/http.js";
-import { crmForgotLimiter, crmLoginLimiter, crmResetLimiter } from "../../lib/limits.js";
+import { crmForgotLimiter, crmLoginLimiter, crmResetLimiter, crmSignupLimiter } from "../../lib/limits.js";
 import { DUMMY_HASH, hashPassword, verifyPassword } from "../../lib/password.js";
 import { parse } from "../../lib/validate.js";
 
@@ -63,10 +63,10 @@ r.post("/login", crmLoginLimiter, async (req, res) => {
     throw new HttpError(401, INVALID);
   }
 
-  // Only reveal "suspended" to someone who knows the password.
+  // Only reveal "pending" or "suspended" to someone who knows the password.
   if (user.status !== "active") {
-    await audit(req, "auth.login_failed", { actor: user, meta: { reason: "suspended" } });
-    throw new HttpError(403, "This account is suspended. Contact your administrator.");
+    await audit(req, "auth.login_failed", { actor: user, meta: { reason: user.status } });
+    throw new HttpError(403, user.status === "pending" ? "Your account is waiting for an administrator to approve it." : "This account is suspended. Contact your administrator.");
   }
 
   const token = randomBytes(32).toString("hex");
@@ -79,6 +79,23 @@ r.post("/login", crmLoginLimiter, async (req, res) => {
     .returning();
   await audit(req, "auth.login", { actor: user });
   res.json({ token, expiresAt, user: staffView(fresh, role) });
+});
+
+/**
+ * POST /api/crm/auth/signup { name, email, password } — requests an account. It starts "pending" with the lowest role
+ * and no access until an admin approves it in Settings → Users. The reply is the same whether or not the email is
+ * already taken, so the form can't be used to find out who has an account.
+ */
+r.post("/signup", crmSignupLimiter, async (req, res) => {
+  const { name, email, password } = parse(signupBody, req.body);
+  const passwordHash = await hashPassword(password); // hashed either way, so timing doesn't reveal a taken email
+  const [user] = await db
+    .insert(users)
+    .values({ name, email, roleId: "viewer", status: "pending", passwordHash, passwordChangedAt: new Date() })
+    .onConflictDoNothing({ target: users.email })
+    .returning();
+  if (user) await audit(req, "user.signup_requested", { actorEmail: email, entityType: "user", entityId: user.id, meta: { email } });
+  res.status(202).json({ requested: true });
 });
 
 /** POST /api/crm/auth/logout — ends this session (no-op without one). */
