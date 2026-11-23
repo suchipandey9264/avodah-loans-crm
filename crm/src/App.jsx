@@ -28,6 +28,7 @@ const AuditLogs = lazy(() => import("./pages/settings/AuditLogs"));
 const Roles = lazy(() => import("./pages/settings/Roles"));
 const Security = lazy(() => import("./pages/settings/Security"));
 const General = lazy(() => import("./pages/settings/General"));
+const Website = lazy(() => import("./pages/settings/Website"));
 const NotificationSettings = lazy(() => import("./pages/settings/NotificationSettings"));
 const Users = lazy(() => import("./pages/settings/Users"));
 
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="audit-logs" element={<RequirePermission perm="audit.view"><AuditLogs /></RequirePermission>} />
             <Route path="security" element={<Security />} />
             <Route path="general" element={<RequirePermission perm="settings.view"><General /></RequirePermission>} />
+            <Route path="website" element={<RequirePermission perm="settings.view"><Website /></RequirePermission>} />
             <Route path="notifications" element={<NotificationSettings />} />
           </Route>
           <Route path="*" element={<NotFound />} />

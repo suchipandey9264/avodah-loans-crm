@@ -39,6 +39,23 @@ test("general settings: defaults, admin-only changes, validation, audit trail", 
   assert.deepEqual(log.meta.fields.sort(), ["companyName", "notificationEmail"]);
 });
 
+test("website settings: empty by default, admin-only, validated, clearable, kept apart from general", async () => {
+  const d = await api("admin", "/crm/settings/website");
+  assert.deepEqual({ ...d.body.settings, updatedAt: undefined }, { phone: null, email: null, city: null, supportHours: null, updatedAt: undefined });
+  assert.equal((await api("manager", "/crm/settings/website")).status, 403);
+  assert.equal((await api("emp1", "/crm/settings/website", { method: "PATCH", body: { city: "Pune" } })).status, 403);
+  const bad = await api("admin", "/crm/settings/website", { method: "PATCH", body: { phone: "call me", email: "nope", city: "" } });
+  assert.equal(bad.status, 400);
+  for (const f of ["phone", "email", "city"]) assert.ok(bad.body.fields[f], f);
+  const ok = await api("admin", "/crm/settings/website", { method: "PATCH", body: { phone: "+91 98765 43210", email: "help@avodahloans.in", city: "Mumbai, Maharashtra", supportHours: "Mon–Sat, 9am–7pm" } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.settings.phone, "+91 98765 43210");
+  assert.equal((await api("admin", "/crm/settings/website", { method: "PATCH", body: { city: null } })).body.settings.city, null);
+  assert.equal((await api("admin", "/crm/settings/general")).body.settings.phone, undefined, "sections don't leak into each other");
+  const log = (await s.pg.query(`select meta from audit_logs where action = 'settings.updated' order by created_at desc limit 1`)).rows[0];
+  assert.deepEqual([log.meta.section, log.meta.fields], ["website", ["city"]]);
+});
+
 test("notification preferences switch bell items off for that user only", async () => {
   await s.pg.query(`insert into leads (kind, name, phone, status) values ('crm', 'Bell Lead', '9833333333', 'new')`);
   assert.deepEqual((await api("manager", "/crm/notifications/preferences")).body.preferences, { leads: true, applications: true, followups: true, security: true });
