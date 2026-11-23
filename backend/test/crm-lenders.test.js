@@ -89,6 +89,8 @@ describe("lenders", () => {
     const ok = await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { payoutPct: 0.5, tatDays: 12, agreementUntil: "2027-08-31", logo: "/bank-logos/sbi.png", active: true } });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.deepEqual([ok.body.lender.payoutPct, ok.body.lender.tatDays, ok.body.lender.agreementUntil], [0.5, 12, "2027-08-31"]);
+    // Seeded lenders store a bare catalogue name; saving one back must not fail validation.
+    assert.equal((await api("owner", "/crm/lenders/acme", { method: "PATCH", body: { logo: "Kotak Mahindra" } })).status, 200);
     await api("owner", "/crm/lenders/nbfc-one", { method: "PATCH", body: { tatDays: 6, payoutPct: 1.5 } });
     await s.pg.query("update applications set stage = 'disbursed', status = 'disbursed', disbursed_amount = 2000000 where id = $1", [appId]);
     const list = (await api("emp", "/crm/lenders?kind=NBFC")).body;

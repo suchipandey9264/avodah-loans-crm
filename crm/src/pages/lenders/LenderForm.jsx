@@ -16,7 +16,7 @@ const schema = z.object({
   name: z.string().trim().min(2, "Enter the lender’s name").max(60),
   fullName: z.string().trim().max(120),
   kind: z.enum(KINDS, { error: "Choose bank, HFC or NBFC" }),
-  logo: optional(z.string().trim().max(300).regex(/^(\/|https:\/\/)\S+$/, "Use a site path like /bank-logos/sbi.png or an https:// link")),
+  logo: optional(z.string().trim().max(300).regex(/^(\/\S+|https:\/\/\S+|\w[\w .-]*)$/, "Use a logo name like sbi, a site path like /bank-logos/sbi.png, or an https:// link")),
   about: z.string().trim().max(1000, "Keep this under 1,000 characters"),
   fee: z.string().trim().max(60, "Keep this under 60 characters"),
   payoutPct: decimal(0, 10, "0 to 10%"),
@@ -118,7 +118,7 @@ export default function LenderForm({ lender, onClose, onSaved }) {
               </Select>
             )}
           </Field>
-          {T("Logo", "logo", { placeholder: "/bank-logos/hdfs.png", hint: "A site path or an https:// link" })}
+          {T("Logo", "logo", { placeholder: "/bank-logos/hdfs.png", hint: "A logo name from /bank-logos (e.g. sbi), a site path or an https:// link" })}
           <Field label="About" error={errors.about} className="sm:col-span-2">
             {(a) => <textarea {...a} rows={3} value={v.about} onChange={set("about")} className="block w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" placeholder="Shown on the lender’s page on the website" />}
           </Field>
