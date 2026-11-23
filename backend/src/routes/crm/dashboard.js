@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { Router } from "express";
 import { can } from "../../crm/middleware.js";
-import { leadScopeSql } from "../../crm/leads.js";
 import { hasPermission } from "../../crm/permissions.js";
 import { dashboardQuery } from "../../crm/validate.js";
 import { LOAN_TYPES } from "../../data/loans.js";
@@ -17,10 +16,7 @@ const typeLabel = (id) => LOAN_TYPES.find((t) => t.id === id)?.label ?? id;
 const rows = async (query) => (await db.execute(query)).rows;
 const when = (flag, fn) => (flag ? fn() : null);
 
-/**
- * What a role may see. Totals and charts need the module's view permission or reports.view;
- * record lists (names, phone numbers) need the module's own view permission.
- */
+/** What a role may see: totals and charts need the module's view permission or reports.view. */
 export function dashboardAccess(permissions) {
   const has = (p) => hasPermission(permissions, p);
   const stats = (m) => has(`${m}.view`) || has("reports.view");
@@ -29,9 +25,6 @@ export function dashboardAccess(permissions) {
     customerStats: stats("customers"),
     applicationStats: stats("applications"),
     lenderStats: stats("lenders"),
-    leadRecords: has("leads.view"),
-    customerRecords: has("customers.view"),
-    applicationRecords: has("applications.view"),
   };
 }
 
@@ -42,6 +35,9 @@ const bucketUnit = (from, to) => {
 
 const between = (column, from, to) => sql`${sql.raw(column)} >= ${from} and ${sql.raw(column)} < ${to}`;
 
+// Credit-score bands for eligibility insights, best first.
+const BANDS = [["750+", "750 and above"], ["700-749", "700–749"], ["650-699", "650–699"], ["below-650", "Below 650"], ["unknown", "No credit score"]];
+
 r.get("/dashboard", can("dashboard.view"), async (req, res) => {
   const { from, to } = parse(dashboardQuery, req.query);
   const prevFrom = new Date(from.getTime() - (to - from));
@@ -50,7 +46,7 @@ r.get("/dashboard", can("dashboard.view"), async (req, res) => {
   const inRange = (col) => between(col, from, to);
   const inPrev = (col) => between(col, prevFrom, from);
 
-  const [kpis, statuses, prevAmounts, series, loanTypes, recentLeads, recentApps, recentCustomers] = await Promise.all([
+  const [kpis, statuses, prevAmounts, series, loanTypes, topLenders, cities, eligibility] = await Promise.all([
     rows(sql`select
       ${a.leadStats ? sql`(select count(*)::int from leads where deleted_at is null and ${inRange("created_at")})` : sql`null`} as leads,
       ${a.leadStats ? sql`(select count(*)::int from leads where deleted_at is null and ${inPrev("created_at")})` : sql`null`} as leads_prev,
@@ -59,6 +55,8 @@ r.get("/dashboard", can("dashboard.view"), async (req, res) => {
       ${a.customerStats ? sql`(select count(*)::int from users where role_id is null)` : sql`null`} as customers_total,
       ${a.applicationStats ? sql`(select count(*)::int from applications where ${inRange("created_at")})` : sql`null`} as applications,
       ${a.applicationStats ? sql`(select count(*)::int from applications where ${inPrev("created_at")})` : sql`null`} as applications_prev,
+      ${a.applicationStats ? sql`(select round(avg(rate)::numeric, 2)::float8 from applications where ${inRange("created_at")})` : sql`null`} as avg_rate,
+      ${a.applicationStats ? sql`(select round(avg(rate)::numeric, 2)::float8 from applications where ${inPrev("created_at")})` : sql`null`} as avg_rate_prev,
       ${a.lenderStats ? sql`(select count(*)::int from lenders where active)` : sql`null`} as lenders_active,
       ${a.lenderStats && a.applicationStats ? sql`(select count(distinct lender_id)::int from applications where ${inRange("created_at")})` : sql`null`} as lenders_used`).then((x) => x[0]),
     when(a.applicationStats, () =>
@@ -68,35 +66,35 @@ r.get("/dashboard", can("dashboard.view"), async (req, res) => {
       rows(sql`select coalesce(sum(loan_amount), 0)::float8 as requested,
                       coalesce(sum(loan_amount) filter (where status = 'disbursed'), 0)::float8 as disbursed
                from applications where ${inPrev("created_at")}`).then((x) => x[0])),
-    when(a.leadStats || a.applicationStats, () =>
+    // Interest rate trend: average quoted rate of the applications logged in each bucket (null = none had a rate).
+    when(a.applicationStats, () =>
       rows(sql`with b as (
                  select generate_series(
                    date_trunc(${unit}, ${from}::timestamptz at time zone ${TZ}),
                    date_trunc(${unit}, (${to}::timestamptz - interval '1 millisecond') at time zone ${TZ}),
                    ('1 ' || ${unit})::interval) as k),
-               l as (select date_trunc(${unit}, created_at at time zone ${TZ}) as k, count(*)::int as n
-                     from leads where deleted_at is null and ${inRange("created_at")} group by 1),
-               ap as (select date_trunc(${unit}, created_at at time zone ${TZ}) as k, count(*)::int as n,
-                             sum(loan_amount)::float8 as requested,
-                             (sum(loan_amount) filter (where status = 'disbursed'))::float8 as disbursed
+               ap as (select date_trunc(${unit}, created_at at time zone ${TZ}) as k, count(*)::int as n, avg(rate) as rate
                       from applications where ${inRange("created_at")} group by 1)
-               select to_char(b.k, 'YYYY-MM-DD') as bucket, coalesce(l.n, 0) as leads, coalesce(ap.n, 0) as applications,
-                      coalesce(ap.requested, 0) as requested, coalesce(ap.disbursed, 0) as disbursed
-               from b left join l on l.k = b.k left join ap on ap.k = b.k order by b.k`)),
+               select to_char(b.k, 'YYYY-MM-DD') as bucket, coalesce(ap.n, 0) as applications, round(ap.rate::numeric, 2)::float8 as rate
+               from b left join ap on ap.k = b.k order by b.k`)),
     when(a.applicationStats, () =>
       rows(sql`select type, count(*)::int as count, coalesce(sum(loan_amount), 0)::float8 as amount
                from applications where ${inRange("created_at")} group by type order by count desc, amount desc`)),
-    when(a.leadRecords, () =>
-      rows(sql`select id, ref, kind, name, phone, email, status, source, created_at as "createdAt"
-               from leads where deleted_at is null and ${leadScopeSql(req.staff)} and ${inRange("created_at")}
-               order by created_at desc limit 10`)),
-    when(a.applicationRecords, () =>
-      rows(sql`select id, ref, contact->>'name' as name, contact->>'phone' as phone, lender_name as "lenderName", type,
-                      loan_amount::float8 as "loanAmount", status, created_at as "createdAt"
-               from applications where ${inRange("created_at")} order by created_at desc limit 10`)),
-    when(a.customerRecords, () =>
-      rows(sql`select id, name, phone, email, created_at as "createdAt"
-               from users where role_id is null and ${inRange("created_at")} order by created_at desc limit 10`)),
+    when(a.applicationStats, () =>
+      rows(sql`select lender_id as id, coalesce(max(lender_name), lender_id) as name, count(*)::int as count,
+                      coalesce(sum(loan_amount) filter (where status = 'disbursed'), 0)::float8 as disbursed
+               from applications where ${inRange("created_at")} group by lender_id order by count desc, disbursed desc limit 5`)),
+    when(a.leadStats, () =>
+      rows(sql`select coalesce(nullif(initcap(trim(city)), ''), 'Not given') as city, count(*)::int as count
+               from leads where deleted_at is null and ${inRange("created_at")} group by 1 order by count desc, 1`)),
+    // Eligibility: the applicant's credit score band against how the application ended.
+    when(a.applicationStats, () =>
+      rows(sql`select case when u.credit_score is null then 'unknown' when u.credit_score >= 750 then '750+'
+                           when u.credit_score >= 700 then '700-749' when u.credit_score >= 650 then '650-699' else 'below-650' end as band,
+                      count(*)::int as applications,
+                      (count(*) filter (where ap.status in ('approved', 'disbursed')))::int as approved,
+                      (count(*) filter (where ap.status = 'rejected'))::int as rejected
+               from applications ap join users u on u.id = ap.user_id where ${inRange("ap.created_at")} group by 1`)),
   ]);
 
   // ---- shape the response ----
@@ -105,16 +103,12 @@ r.get("/dashboard", can("dashboard.view"), async (req, res) => {
   const amount = (...keys) => keys.reduce((n, k) => n + (byStatus[k]?.amount ?? 0), 0);
   const totalApps = count("submitted", "in_review", "approved", "rejected", "disbursed");
 
-  const pick = (row, keys) => Object.fromEntries(keys.map((k) => [k, row[k]]));
-  const seriesKeys = ["bucket", ...(a.leadStats ? ["leads"] : []), ...(a.applicationStats ? ["applications", "requested", "disbursed"] : [])];
-
-  const activity = [
-    ...(recentLeads ?? []).map((l) => ({ type: "lead", id: l.id, at: l.createdAt, name: l.name, kind: l.kind })),
-    ...(recentApps ?? []).map((x) => ({ type: "application", id: x.id, at: x.createdAt, name: x.name, ref: x.ref, lenderName: x.lenderName, loanType: typeLabel(x.type), loanAmount: x.loanAmount })),
-    ...(recentCustomers ?? []).map((c) => ({ type: "customer", id: c.id, at: c.createdAt, name: c.name || c.phone || c.email })),
-  ]
-    .sort((x, y) => new Date(y.at) - new Date(x.at))
-    .slice(0, 10);
+  // Top 6 cities by enquiries; past 7, the rest fold into "Other cities".
+  const cityRows = cities ?? [];
+  const cityList = cityRows.length > 7
+    ? [...cityRows.slice(0, 6), { city: "Other cities", count: cityRows.slice(6).reduce((n, c) => n + c.count, 0) }]
+    : cityRows;
+  const byBand = Object.fromEntries((eligibility ?? []).map((e) => [e.band, e]));
 
   res.json({
     range: { from, to, previousFrom: prevFrom, previousTo: from, unit, timezone: TZ },
@@ -137,19 +131,11 @@ r.get("/dashboard", can("dashboard.view"), async (req, res) => {
           previousDisbursed: prevAmounts.disbursed,
         }
       : null,
-    series: series ? series.map((row) => pick(row, seriesKeys)) : null,
-    funnel: a.applicationStats
-      ? [
-          ...(a.leadStats ? [{ stage: "leads", label: "Leads", value: kpis.leads }] : []),
-          { stage: "applications", label: "Applications", value: totalApps },
-          { stage: "approved", label: "Approved", value: count("approved", "disbursed") },
-          { stage: "disbursed", label: "Disbursed", value: count("disbursed") },
-        ]
-      : null,
+    interestRates: series ? { average: kpis.avg_rate, previous: kpis.avg_rate_prev, series } : null,
     loanTypes: loanTypes ? loanTypes.map((t) => ({ type: t.type, label: typeLabel(t.type), count: t.count, amount: t.amount })) : null,
-    recentLeads: recentLeads ? recentLeads.slice(0, 6) : null,
-    recentApplications: recentApps ? recentApps.slice(0, 6).map((x) => ({ ...x, loanType: typeLabel(x.type) })) : null,
-    activity: a.leadRecords || a.applicationRecords || a.customerRecords ? activity : null,
+    topLenders,
+    cities: cities ? { total: cityRows.reduce((n, c) => n + c.count, 0), list: cityList } : null,
+    eligibility: eligibility ? BANDS.map(([band, label]) => ({ band, label, applications: 0, approved: 0, rejected: 0, ...byBand[band] })) : null,
   });
 });
 

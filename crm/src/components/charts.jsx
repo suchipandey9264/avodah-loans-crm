@@ -5,6 +5,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 export const SERIES = ["#5a2db3", "#ea580c"];
 export const ORDINAL = ["#b39de8", "#8b67df", "#6d3fd0", "#46208d"];
 export const BAR = "#6d3fd0";
+// Categorical, fixed order (dataviz reference palette, validated light). Assign by entity, never by rank.
+export const CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
 const GRID = "#ebe8f2";
 const AXIS = "#cfc9dd";
 const MUTED = "#7a748c";
@@ -106,21 +108,26 @@ export function LineChart({ data, series, xLabel, xLabelLong = xLabel, formatVal
               {xLabel(data[i])}
             </text>
           ))}
+          {/* null = no value for that bucket: the line breaks there, and a point with no neighbours gets a dot */}
           {series.map((s) => (
-            <path
-              key={s.key}
-              d={data.map((d, i) => `${i ? "L" : "M"}${x(i)},${y(d[s.key])}`).join(" ")}
-              fill="none"
-              stroke={s.color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
+            <g key={s.key}>
+              <path
+                d={data.map((d, i) => (d[s.key] == null ? "" : `${data[i - 1]?.[s.key] != null ? "L" : "M"}${x(i)},${y(d[s.key])}`)).join(" ")}
+                fill="none"
+                stroke={s.color}
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {data.map((d, i) => d[s.key] != null && data[i - 1]?.[s.key] == null && data[i + 1]?.[s.key] == null && (
+                <circle key={i} cx={x(i)} cy={y(d[s.key])} r="4" fill={s.color} />
+              ))}
+            </g>
           ))}
           {active != null && (
             <g>
               <line x1={x(active)} x2={x(active)} y1={PAD.top} y2={PAD.top + plotH} stroke={AXIS} strokeWidth="1" />
-              {series.map((s) => (
+              {series.map((s) => data[active][s.key] != null && (
                 <circle key={s.key} cx={x(active)} cy={y(data[active][s.key])} r="4" fill={s.color} stroke="#fff" strokeWidth="2" />
               ))}
             </g>
@@ -231,6 +238,75 @@ export function BarList({ items, colors, max = Math.max(1, ...items.map((i) => i
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Donut: one whole split into a few parts, with a legend that carries names, shares and counts
+ * (some slice colours are under 3:1 on white, so the legend and table view are required, not optional).
+ */
+export function DonutChart({ parts, label, unit, size = 168 }) {
+  const [active, setActive] = useState(null);
+  const total = parts.reduce((n, p) => n + p.value, 0);
+  const r = size / 2;
+  const inner = r * 0.62;
+  const pct = (v) => `${Math.round((v / total) * 100)}%`;
+  const pt = (a, rad) => `${r + rad * Math.cos(a)},${r + rad * Math.sin(a)}`;
+  let angle = -Math.PI / 2;
+  const arcs = parts.filter((p) => p.value > 0).map((p) => {
+    const a0 = angle;
+    angle += (p.value / total) * 2 * Math.PI;
+    return { ...p, a0, a1: angle };
+  });
+  const arc = ({ a0, a1 }) => {
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    return `M${pt(a0, r)} A${r},${r} 0 ${large} 1 ${pt(a1, r)} L${pt(a1, inner)} A${inner},${inner} 0 ${large} 0 ${pt(a0, inner)} Z`;
+  };
+  const shown = arcs.find((p) => p.key === active);
+
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} role="img" aria-label={`${label}: ${arcs.map((p) => `${p.label} ${pct(p.value)}`).join(", ")}`} onPointerLeave={() => setActive(null)}>
+          {arcs.map((p) =>
+            arcs.length === 1 ? (
+              <circle key={p.key} cx={r} cy={r} r={(r + inner) / 2} fill="none" stroke={p.color} strokeWidth={r - inner} />
+            ) : (
+              <path
+                key={p.key}
+                d={arc(p)}
+                fill={p.color}
+                stroke="#fff"
+                strokeWidth="2"
+                opacity={active == null || active === p.key ? 1 : 0.45}
+                tabIndex={0}
+                aria-label={`${p.label}: ${p.value} ${unit} (${pct(p.value)})`}
+                className="outline-none"
+                onPointerEnter={() => setActive(p.key)}
+                onFocus={() => setActive(p.key)}
+                onBlur={() => setActive(null)}
+              />
+            )
+          )}
+        </svg>
+        <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
+          <p className="text-xl font-extrabold leading-tight text-ink" style={{ fontVariantNumeric: "tabular-nums" }}>{shown ? pct(shown.value) : total}</p>
+          <p className="max-w-24 truncate text-[11px] text-muted">{shown ? shown.label : unit}</p>
+        </div>
+      </div>
+      <ul className="w-full min-w-0 space-y-2 text-sm">
+        {arcs.map((p) => (
+          <li key={p.key} className="flex items-center gap-2" onPointerEnter={() => setActive(p.key)} onPointerLeave={() => setActive(null)}>
+            <span className="size-2.5 shrink-0 rounded-sm" style={{ background: p.color }} aria-hidden />
+            <span className="min-w-0 flex-1 truncate font-semibold text-ink">{p.label}</span>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              <strong className="font-bold">{pct(p.value)}</strong>
+              <span className="ml-1.5 text-xs text-muted">{p.value}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

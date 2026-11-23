@@ -49,7 +49,14 @@ app.use((err, _req, res, _next) => {
 });
 
 try {
-  await connectDB();
+  // A suspended Neon database can take a few seconds to wake: retry for ~30s instead of exiting on the first failure.
+  for (let attempt = 1; ; attempt++) {
+    try { await connectDB(); break; } catch (err) {
+      if (!process.env.DATABASE_URL || attempt === 6) throw err;
+      console.error(`PostgreSQL not reachable (${err.cause?.message ?? err.message}) — retrying in 5s…`);
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
   await ensureSystemRoles();
   // Express 5 passes listen errors (e.g. port already in use) to this callback instead of throwing.
   app.listen(PORT, (err) => {

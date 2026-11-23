@@ -51,6 +51,9 @@ async function seed(pg) {
   await app("disbursed", 6 * L, "personal", "hdfc", ist("2026-10-30T10:00:00"));
   await app("disbursed", 10 * L, "home", "sbi", ist("2026-09-12T10:00:00")); // previous period
   await app("submitted", 5 * L, "car", "icici", ist("2026-09-25T10:00:00")); // previous period
+  await pg.query(`update applications set rate = case type when 'home' then 8.5 when 'personal' then 11 else 9.5 end`);
+  await pg.query(`update leads set city = case phone when '9811111111' then 'mumbai' when '9866666666' then ' Mumbai ' when '9877777777' then 'Delhi' end`);
+  await pg.query(`update users set credit_score = 780 where id = $1`, [asha]);
 }
 
 before(async () => {
@@ -90,36 +93,32 @@ describe("dashboard figures (super admin, October 2026)", () => {
     assert.deepEqual(d.amounts, { requested: 21 * L, approved: 14 * L, disbursed: 11 * L, average: 3.5 * L, previousRequested: 15 * L, previousDisbursed: 10 * L });
   });
 
-  test("daily series covers every day, in India time, with zero days filled", () => {
+  test("interest rate trend: daily, in India time, empty days have no rate", () => {
+    const ir = d.interestRates;
     assert.equal(d.range.unit, "day");
-    assert.equal(d.series.length, 31);
-    assert.equal(d.series[0].bucket, "2026-10-01");
-    assert.equal(d.series.at(-1).bucket, "2026-10-31");
-    const day = (b) => d.series.find((x) => x.bucket === b);
-    assert.equal(day("2026-10-01").leads, 1); // 02:00 IST, still 30 Sep in UTC
-    assert.equal(day("2026-10-05").leads, 2);
-    assert.equal(day("2026-10-31").leads, 1);
-    assert.deepEqual(day("2026-10-20"), { bucket: "2026-10-20", leads: 0, applications: 1, requested: 5 * L, disbursed: 5 * L });
-    assert.equal(d.series.reduce((n, x) => n + x.leads, 0), 4);
-    assert.equal(d.series.reduce((n, x) => n + x.applications, 0), 6);
-    assert.equal(d.series.reduce((n, x) => n + x.requested, 0), 21 * L);
+    assert.deepEqual([ir.average, ir.previous], [9.5, 9]);
+    assert.equal(ir.series.length, 31);
+    assert.equal(ir.series[0].bucket, "2026-10-01");
+    assert.equal(ir.series.at(-1).bucket, "2026-10-31");
+    const day = (b) => ir.series.find((x) => x.bucket === b);
+    assert.deepEqual(day("2026-10-10"), { bucket: "2026-10-10", applications: 1, rate: 11 });
+    assert.deepEqual(day("2026-10-01"), { bucket: "2026-10-01", applications: 0, rate: null });
+    assert.equal(ir.series.reduce((n, x) => n + x.applications, 0), 6);
   });
 
-  test("conversion funnel and loan-type mix", () => {
-    assert.deepEqual(d.funnel.map((f) => [f.stage, f.value]), [["leads", 4], ["applications", 6], ["approved", 3], ["disbursed", 2]]);
+  test("loan-type distribution and top lenders", () => {
     assert.deepEqual(d.loanTypes.map((t) => [t.label, t.count, t.amount]), [["Home Loan", 3, 8 * L], ["Personal Loan", 2, 9 * L], ["Car Loan", 1, 4 * L]]);
+    assert.deepEqual(d.topLenders.map((x) => [x.name, x.count, x.disbursed]), [["SBI", 3, 5 * L], ["HDFC", 2, 6 * L], ["ICICI", 1, 0]]);
   });
 
-  test("recent leads, applications and activity, newest first", () => {
-    assert.equal(d.recentLeads[0].name, "Latest Lead");
-    assert.equal(d.recentLeads.length, 4);
-    assert.deepEqual(d.recentApplications.map((x) => x.status), ["disbursed", "disbursed", "rejected", "approved", "in_review", "submitted"]);
-    assert.equal(d.recentApplications[0].loanType, "Personal Loan");
-    assert.equal(d.activity.length, 10);
-    assert.equal(d.activity[0].name, "Latest Lead");
-    assert.ok(d.activity.some((a) => a.type === "customer") && d.activity.some((a) => a.type === "application"));
-    const times = d.activity.map((a) => new Date(a.at).getTime());
-    assert.deepEqual(times, [...times].sort((x, y) => y - x));
+  test("city-wise enquiries: names tidied, missing cities counted", () => {
+    assert.deepEqual(d.cities, { total: 4, list: [{ city: "Mumbai", count: 2 }, { city: "Delhi", count: 1 }, { city: "Not given", count: 1 }] });
+  });
+
+  test("eligibility: outcomes by credit-score band, every band listed", () => {
+    assert.deepEqual(d.eligibility.map((e) => e.band), ["750+", "700-749", "650-699", "below-650", "unknown"]);
+    assert.deepEqual(d.eligibility[0], { band: "750+", label: "750 and above", applications: 6, approved: 3, rejected: 1 });
+    assert.equal(d.eligibility[4].applications, 0);
   });
 });
 
@@ -131,18 +130,20 @@ describe("date filters", () => {
     assert.equal(res.body.statuses.total, 0);
     assert.equal(res.body.amounts.average, 0);
     assert.deepEqual(res.body.loanTypes, []);
-    assert.deepEqual(res.body.recentLeads, []);
-    assert.equal(res.body.series.length, 7);
-    assert.ok(res.body.series.every((x) => x.leads === 0 && x.applications === 0));
+    assert.deepEqual(res.body.topLenders, []);
+    assert.deepEqual(res.body.cities, { total: 0, list: [] });
+    assert.equal(res.body.interestRates.average, null);
+    assert.equal(res.body.interestRates.series.length, 7);
+    assert.ok(res.body.interestRates.series.every((x) => x.applications === 0 && x.rate === null));
   });
 
   test("longer periods group by week, then by month", async () => {
     const q = await dash(owner, { from: "2026-08-01T00:00:00Z", to: "2026-11-01T00:00:00Z" });
     assert.equal(q.body.range.unit, "week");
-    assert.equal(q.body.series.reduce((n, x) => n + x.applications, 0), 8);
+    assert.equal(q.body.interestRates.series.reduce((n, x) => n + x.applications, 0), 8);
     const y = await dash(owner, { from: "2025-11-01T00:00:00Z", to: "2026-11-01T00:00:00Z" });
     assert.equal(y.body.range.unit, "month");
-    assert.ok(y.body.series.length >= 12 && y.body.series.length <= 13);
+    assert.ok(y.body.interestRates.series.length >= 12 && y.body.interestRates.series.length <= 13);
     assert.equal(y.body.kpis.leads.value, 7);
   });
 
@@ -170,28 +171,24 @@ describe("dashboard respects roles (enforced by the server)", () => {
     assert.equal(d.kpis.customers.value, 3);
     assert.equal(d.kpis.applications, null);
     assert.equal(d.kpis.lenders, null);
-    for (const k of ["statuses", "amounts", "funnel", "loanTypes", "recentApplications"]) assert.equal(d[k], null, k);
-    assert.deepEqual(Object.keys(d.series[0]), ["bucket", "leads"]);
-    assert.equal(d.recentLeads.length, 4);
-    assert.ok(d.activity.every((a) => a.type === "lead" || a.type === "customer"));
+    for (const k of ["statuses", "amounts", "interestRates", "loanTypes", "topLenders", "eligibility"]) assert.equal(d[k], null, k);
+    assert.equal(d.cities.total, 4);
   });
 
-  test("viewer (reports): every total and chart, but no names or phone numbers", async () => {
+  test("viewer (reports): every total and chart, and no phone numbers", async () => {
     const d = (await dash(tokens.viewer)).body;
     assert.equal(d.kpis.applications.value, 6);
     assert.equal(d.amounts.requested, 21 * L);
-    assert.equal(d.funnel.length, 4);
-    assert.equal(d.recentLeads, null);
-    assert.equal(d.recentApplications, null);
-    assert.equal(d.activity, null);
+    assert.equal(d.topLenders.length, 3);
+    assert.equal(d.cities.total, 4);
     assert.equal(JSON.stringify(d).includes("9811111111"), false);
   });
 
-  test("sales executive: sales and lender figures plus records", async () => {
+  test("sales executive: sales and lender figures", async () => {
     const d = (await dash(tokens.employee)).body;
     assert.equal(d.kpis.applications.value, 6);
     assert.deepEqual(d.kpis.lenders, { active: 3, withApplications: 3 });
-    assert.ok(d.recentApplications.length > 0);
+    assert.ok(d.eligibility.length > 0);
   });
 });
 
