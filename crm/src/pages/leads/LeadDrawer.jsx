@@ -125,7 +125,7 @@ export default function LeadDrawer({ leadId, onClose }) {
                   {lead.status === "lost" && lead.lostReason && <div className="col-span-2"><dt className="text-xs text-muted">Lost reason</dt><dd>{lead.lostReason}</dd></div>}
                 </dl>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Status">
                     {(a) => (
                       <Select {...a} compact value={lead.status} disabled={!canEdit || update.isPending} onChange={(e) => {
@@ -134,13 +134,6 @@ export default function LeadDrawer({ leadId, onClose }) {
                         update.mutate({ status });
                       }}>
                         {Object.entries(LEAD_STATUS).map(([id, [label]]) => <option key={id} value={id} disabled={id === "converted" && !converted}>{label}</option>)}
-                      </Select>
-                    )}
-                  </Field>
-                  <Field label="Temperature">
-                    {(a) => (
-                      <Select {...a} compact value={lead.temperature ?? ""} disabled={!canEdit || update.isPending} onChange={(e) => update.mutate({ temperature: e.target.value || null })}>
-                        <option value="">—</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option>
                       </Select>
                     )}
                   </Field>

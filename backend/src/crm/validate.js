@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPLICATION_STAGES, DOCUMENT_STATUSES, DOCUMENT_TYPES, LENDER_KINDS, FOLLOWUP_TYPES, KYC_STATUSES, LEAD_SOURCES, LEAD_STATUSES, LEAD_TEMPERATURES, USER_STATUSES } from "../db/schema.js";
+import { APPLICATION_STAGES, DOCUMENT_STATUSES, DOCUMENT_TYPES, LENDER_KINDS, FOLLOWUP_TYPES, KYC_STATUSES, LEAD_SOURCES, LEAD_STATUSES, USER_STATUSES } from "../db/schema.js";
 import { EMPLOYMENT, LOAN_TYPES } from "../data/loans.js";
 import { email, pan, personName, phone, pincode } from "../lib/validate.js";
 
@@ -79,7 +79,6 @@ const leadFields = {
   annualIncome: money.optional(),
   employment: z.enum(EMPLOYMENT.map((e) => e.id), { error: "Choose an employment type" }).optional(),
   source: z.enum(LEAD_SOURCES, { error: "Choose a lead source" }),
-  temperature: z.enum(LEAD_TEMPERATURES).optional(),
   message: z.string().trim().max(2000).optional(),
 };
 const ownerRef = z.union([z.literal("auto"), z.uuid("Choose an employee"), z.null()]);
@@ -95,7 +94,6 @@ export const leadCreateBody = z.object({
   employment: nullish(z.enum(EMPLOYMENT.map((e) => e.id), { error: "Choose an employment type" })),
   message: nullish(z.string().trim().max(2000)),
   source: leadFields.source.default("walk_in"),
-  temperature: z.enum(LEAD_TEMPERATURES).nullish().transform((v) => v ?? "warm"),
   ownerId: ownerRef.optional(),
 });
 export const leadUpdateBody = z
@@ -107,7 +105,6 @@ export const leadUpdateBody = z
     loanAmount: money.nullable(),
     annualIncome: money.nullable(),
     employment: leadFields.employment.nullable(),
-    temperature: leadFields.temperature.nullable(),
     message: leadFields.message.nullable(),
     status: z.enum(LEAD_STATUSES),
     lostReason: z.string().trim().min(2, "Say why the lead was lost").max(300),
@@ -122,7 +119,6 @@ export const leadListQuery = listQuery.extend({
   source: z.enum(LEAD_SOURCES).optional(),
   city: z.string().trim().max(60).optional(),
   loanType: z.string().max(40).optional(),
-  temperature: z.enum(LEAD_TEMPERATURES).optional(),
   owner: z.union([z.literal("unassigned"), z.literal("me"), z.uuid()]).optional(),
   sort: z.enum(LEAD_SORTS).default("created"),
   dir: z.enum(["asc", "desc"]).default("desc"),

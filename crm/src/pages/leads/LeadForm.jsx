@@ -25,7 +25,6 @@ const schema = z.object({
   employment: z.string(),
   annualIncome: amount,
   source: z.string().min(1, "Choose a source"),
-  temperature: z.string(),
   ownerId: z.string(),
   message: z.string().trim().max(2000),
 });
@@ -40,7 +39,6 @@ const fromLead = (l) => ({
   employment: l?.employment ?? "salaried",
   annualIncome: l?.annualIncome ? String(l.annualIncome) : "",
   source: l?.source ?? "walk_in",
-  temperature: l?.temperature ?? "warm",
   ownerId: "auto",
   message: l?.message ?? "",
 });
@@ -87,7 +85,6 @@ export default function LeadForm({ open, lead, onClose, onSaved }) {
       employment: data.employment || null,
       annualIncome: data.annualIncome ? Number(data.annualIncome) : null,
       source: data.source,
-      temperature: data.temperature || null,
       message: data.message || null,
     };
     if (!editing && canAssign) body.ownerId = data.ownerId === "auto" ? "auto" : data.ownerId || null;
@@ -142,15 +139,6 @@ export default function LeadForm({ open, lead, onClose, onSaved }) {
           {(a) => (
             <Select {...a} value={v.source} onChange={set("source")}>
               {meta?.sources.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </Select>
-          )}
-        </Field>
-        <Field label="Temperature" error={errors.temperature}>
-          {(a) => (
-            <Select {...a} value={v.temperature} onChange={set("temperature")}>
-              <option value="hot">Hot</option>
-              <option value="warm">Warm</option>
-              <option value="cold">Cold</option>
             </Select>
           )}
         </Field>

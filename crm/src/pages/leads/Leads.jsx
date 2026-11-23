@@ -7,12 +7,12 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { formatCount, formatDate, formatMoney, timeAgo } from "../../lib/format";
 import { useDebounced } from "../../lib/hooks";
-import { HotIcon, LEAD_STATUS, requirement, STATUS_ORDER, StatusBadge, TemperatureBadge, useLabels, useLeadMeta, useLeadRefresh } from "../../lib/leads";
+import { LEAD_STATUS, requirement, STATUS_ORDER, StatusBadge, useLabels, useLeadMeta, useLeadRefresh } from "../../lib/leads";
 import LeadDrawer from "./LeadDrawer";
 import LeadForm from "./LeadForm";
 
 const PAGE_SIZE = 25;
-const FILTER_KEYS = ["q", "status", "source", "loanType", "owner", "temperature", "city"];
+const FILTER_KEYS = ["q", "status", "source", "loanType", "owner", "city"];
 
 export default function Leads() {
   const { can } = useAuth();
@@ -92,7 +92,7 @@ export default function Leads() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Select aria-label="Source" value={filters.source ?? ""} onChange={(e) => setParam({ source: e.target.value })}>
               <option value="">All sources</option>
               {meta.data?.sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -110,10 +110,6 @@ export default function Leads() {
             <Select aria-label="City" value={filters.city ?? ""} onChange={(e) => setParam({ city: e.target.value })}>
               <option value="">All cities</option>
               {meta.data?.cities.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
-            <Select aria-label="Temperature" value={filters.temperature ?? ""} onChange={(e) => setParam({ temperature: e.target.value })}>
-              <option value="">Hot, warm &amp; cold</option>
-              <option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option>
             </Select>
           </div>
         </div>
@@ -230,7 +226,7 @@ function LeadTable({ query, counts, filters, sort, dir, page, labels, meta, setP
                           <Avatar name={l.name} size="sm" />
                           <div className="min-w-0">
                             <button type="button" className="flex items-center gap-1.5 text-left font-semibold hover:text-brand-700" onClick={(e) => { e.stopPropagation(); onOpen(l.id); }}>
-                              {l.name} <HotIcon value={l.temperature} />
+                              {l.name}
                             </button>
                             <p className="text-xs text-muted">{l.ref} · +91 {l.phone}</p>
                           </div>
@@ -258,7 +254,7 @@ function LeadTable({ query, counts, filters, sort, dir, page, labels, meta, setP
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpen(l.id)}>
                     <span className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="flex items-center gap-1.5 font-semibold">{l.name} <HotIcon value={l.temperature} /></span>
+                        <span className="flex items-center gap-1.5 font-semibold">{l.name}</span>
                         <span className="block text-xs text-muted">{l.ref} · +91 {l.phone}</span>
                       </span>
                       <StatusBadge status={l.status} />
@@ -378,10 +374,7 @@ function LeadBoard({ query, labels, onOpen, onFlash, refresh }) {
                     className={`rounded-xl border border-line bg-white p-3 shadow-sm ${dragging?.id === l.id ? "opacity-50" : ""} ${canMove && l.status !== "converted" ? "cursor-grab active:cursor-grabbing" : ""}`}
                   >
                     <button type="button" className="w-full text-left" onClick={() => onOpen(l.id)}>
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="font-semibold">{l.name}</span>
-                        <TemperatureBadge value={l.temperature} />
-                      </span>
+                      <span className="block font-semibold">{l.name}</span>
                       <span className="mt-1 block text-xs text-muted">{[req.product, l.city].filter((x) => x && x !== "—").join(" · ") || "No requirement yet"}</span>
                       <span className="mt-2 flex justify-between text-[11px] text-muted">
                         <span>{l.ownerName?.split(" ")[0] ?? "Unassigned"}</span>
