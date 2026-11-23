@@ -289,7 +289,8 @@ const lenderFields = {
   kind: z.enum(LENDER_KINDS, { error: "Choose bank, HFC or NBFC" }),
   fee: optText(60).nullable(),
   about: optText(1000).nullable(),
-  logo: z.string().trim().max(300).regex(/^(\/|https:\/\/)\S+$/, "Use a site path like /bank-logos/sbi.png or an https:// link").nullable(),
+  // A catalogue logo name (sbi → /bank-logos/sbi.png, as the seeded lenders store it), a site path, or an https link.
+  logo: z.string().trim().max(300).regex(/^(\/\S+|https:\/\/\S+|\w[\w .-]*)$/, "Use a logo name like sbi, a site path like /bank-logos/sbi.png, or an https:// link").nullable(),
   active: z.boolean(),
   payoutPct: z.coerce.number({ error: "Enter a percentage" }).min(0, "Can’t be negative").max(10, "Check the payout (max 10%)").nullable(),
   tatDays: z.coerce.number({ error: "Enter days" }).int("Whole days").min(1, "At least 1 day").max(180, "At most 180 days").nullable(),
