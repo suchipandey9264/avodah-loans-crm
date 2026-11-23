@@ -65,6 +65,7 @@ export function customerView(u, { sensitive, rmName = null, createdByName = null
     emp: p.emp ?? null,
     company: p.employment?.company ?? null,
     annualIncome: p.employment?.annualIncome != null && p.employment.annualIncome !== "" ? Number(p.employment.annualIncome) : null,
+    employment: p.employment ?? {}, // everything the customer filled in on the website's Employment tab
     kycStatus: u.kycStatus,
     creditScore: u.creditScore,
     creditScoreUpdatedAt: u.creditScoreUpdatedAt,

@@ -246,6 +246,9 @@ describe("notifications", () => {
     await new Promise((r) => setTimeout(r, 20));
     await s.pg.query(`insert into leads (kind, name, phone) values ('credit-report', 'Another Lead', '9700000003')`);
     assert.equal((await s.api("/crm/notifications", { token: owner })).body.unread, 1);
+    // A website form insert (no source given) is tagged with the form it came from.
+    const sources = (await s.pg.query(`select kind, source from leads where name in ('Another Lead', 'Asha Verma')`)).rows;
+    assert.deepEqual(sources.map((r) => `${r.kind}:${r.source}`).sort(), ["callback:website_callback", "credit-report:website_credit_report"]);
   });
 
   test("admins are told about locked accounts", async () => {

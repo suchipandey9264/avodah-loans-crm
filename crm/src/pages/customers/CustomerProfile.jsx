@@ -22,6 +22,16 @@ const FIELD_LABEL = {
   emp: "employment", company: "employer", annualIncome: "annual income",
 };
 const KYC_LABEL = { pending: "Pending", verified: "Verified", re_kyc: "Re-KYC" };
+// Fields from the website's Employment tab (avodah-loans Dashboard.jsx), with the labels the customer saw. `true` = rupee amount.
+const EMP_DETAILS = [
+  ["companyType", "Company type"], ["sector", "Sector"], ["designation", "Designation"], ["monthlySalary", "Net monthly salary", true],
+  ["salaryMode", "Salary / pension received via"], ["salaryBank", "Salary / pension account bank"], ["experience", "Total work experience"],
+  ["currentJobYears", "Years in current job"], ["officialEmail", "Official email"], ["businessName", "Business name"], ["nature", "Nature of business"],
+  ["constitution", "Business constitution"], ["profession", "Profession"], ["practiceName", "Practice / firm name"], ["registration", "Registration number"],
+  ["workType", "Type of work"], ["clients", "Main clients or platforms"], ["businessYears", "Years in business / practice"], ["gst", "GST registered?"],
+  ["turnover", "Annual turnover", true], ["itrYears", "ITR filed for"], ["monthlyPension", "Monthly pension", true], ["officePincode", "Work pincode"],
+  ["existingEmi", "Existing EMIs per month", true], ["creditCards", "Credit cards held"], ["defaults", "Missed EMI in last 2 years?"],
+];
 const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
 /** One readable line for every kind of history entry. */
@@ -239,6 +249,8 @@ function Details({ data, canEdit, canKyc, onEdit, onDone, onError }) {
         <Pairs rows={[
           ["Employment", empLabel(meta, c.emp)], ["Employer / business", c.company], ["Annual income", c.annualIncome && formatMoney(c.annualIncome)],
           ["CIBIL score", c.creditScore], ["Score recorded", c.creditScoreUpdatedAt && formatDate(c.creditScoreUpdatedAt)],
+          ...EMP_DETAILS.filter(([k]) => c.employment?.[k] != null && c.employment[k] !== "")
+            .map(([k, label, money]) => [label, money ? formatMoney(Number(c.employment[k])) : String(c.employment[k])]),
         ]} />
       </Card>
     </div>

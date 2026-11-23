@@ -3,7 +3,7 @@ import { Badge } from "../components/ui";
 import { api } from "./api";
 
 export const STAGES = {
-  new: ["New", "gray"], login: ["Login", "blue"], documents: ["Document verification", "amber"], credit_review: ["Credit review", "purple"],
+  new: ["Submitted", "gray"], login: ["Advisor call", "blue"], documents: ["Documents", "amber"], credit_review: ["Credit review", "purple"],
   sanctioned: ["Sanctioned", "orange"], disbursed: ["Disbursed", "green"], rejected: ["Rejected", "red"],
 };
 export const STAGE_ORDER = Object.keys(STAGES);
