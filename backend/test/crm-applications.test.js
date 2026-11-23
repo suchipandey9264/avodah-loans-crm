@@ -101,7 +101,7 @@ describe("the application lifecycle", () => {
     assert.equal((await move("emp", id.app, { stage: "login" })).status, 403, "sales executives can't move files");
     const skip = await move("analyst", id.app, { stage: "documents" });
     assert.equal(skip.status, 409);
-    assert.match(skip.body.error, /next stage is Login/);
+    assert.match(skip.body.error, /next stage is Advisor call/);
     let res = await move("analyst", id.app, { stage: "login", note: "Logged with SBI branch" });
     assert.deepEqual([res.status, res.body.application.stage, res.body.application.status], [200, "login", "submitted"]);
     res = await move("analyst", id.app, { stage: "documents" });
@@ -186,7 +186,7 @@ describe("the application lifecycle", () => {
 });
 
 describe("entry points and links", () => {
-  test("a converted lead arrives at Login, assigned to the lead's owner", async () => {
+  test("a converted lead arrives at Advisor call (login stage), assigned to the lead's owner", async () => {
     const lead = (await api("owner", "/crm/leads", { method: "POST", body: { name: "Lead Person", phone: "9345678901", source: "walk_in", ownerId: id.emp } })).body.lead;
     await api("emp", `/crm/leads/${lead.id}`, { method: "PATCH", body: { status: "qualified" } });
     const conv = (await api("emp", `/crm/leads/${lead.id}/convert`, { method: "POST", body: { lenderId: "sbi", loanType: "home", loanAmount: 3000000 } })).body;

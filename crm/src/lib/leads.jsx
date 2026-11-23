@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame } from "lucide-react";
 import { Badge } from "../components/ui";
 import { api } from "./api";
 import { formatMoney } from "./format";
@@ -23,14 +22,6 @@ export function StatusBadge({ status }) {
   return <Badge tone={tone} dot>{label}</Badge>;
 }
 
-const TEMP = { hot: ["Hot", "red"], warm: ["Warm", "orange"], cold: ["Cold", "blue"] };
-export function TemperatureBadge({ value }) {
-  if (!value) return null;
-  const [label, tone] = TEMP[value];
-  return <Badge tone={tone}>{label}</Badge>;
-}
-export const HotIcon = ({ value }) =>
-  value === "hot" ? <Flame className="size-3.5 shrink-0 text-orange-600" aria-label="Hot lead" /> : null;
 
 export function useLeadMeta() {
   return useQuery({ queryKey: ["leads-meta"], queryFn: api.leadsMeta, staleTime: 5 * 60_000 });

@@ -122,6 +122,8 @@ export const api = {
   // Settings → General / Notifications
   generalSettings: () => request("/settings/general"),
   updateGeneralSettings: (body) => request("/settings/general", { method: "PATCH", body }),
+  websiteSettings: () => request("/settings/website"),
+  updateWebsiteSettings: (body) => request("/settings/website", { method: "PATCH", body }),
   notificationPreferences: () => request("/notifications/preferences"),
   updateNotificationPreferences: (body) => request("/notifications/preferences", { method: "PUT", body }),
 

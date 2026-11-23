@@ -39,7 +39,7 @@ describe("create", () => {
   test("manager adds a lead with every field; it gets an L- reference and history", async () => {
     const res = await create("manager", {
       name: "Rohan Joshi", phone: phone(), email: "rohan@example.com", city: "Indore", loanType: "home", loanAmount: 4050000,
-      annualIncome: 1800000, employment: "freelancer", source: "facebook_ads", temperature: "hot", ownerId: id.emp1,
+      annualIncome: 1800000, employment: "freelancer", source: "facebook_ads", ownerId: id.emp1,
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const lead = res.body.lead;
@@ -162,7 +162,7 @@ describe("who sees which leads", () => {
     assert.ok(emp2.every((l) => l.ownerId === id.emp2 || l.ownerId === null));
     assert.ok(emp2.some((l) => l.id === pool.id));
     assert.equal((await detail("emp2", theirs.id)).status, 404);
-    assert.equal((await patch("emp2", theirs.id, { temperature: "cold" })).status, 404);
+    assert.equal((await patch("emp2", theirs.id, { city: "Pune" })).status, 404);
     assert.equal((await detail("manager", theirs.id)).status, 200);
     assert.equal((await list("viewer")).status, 403);
     assert.equal((await detail("owner", "not-a-uuid")).status, 404);
@@ -176,7 +176,7 @@ describe("edit, status and history", () => {
   });
 
   test("edit fields; each change is recorded with old and new values", async () => {
-    const res = await patch("emp1", lead.id, { city: "Mysuru", loanAmount: 6000000, temperature: "hot" });
+    const res = await patch("emp1", lead.id, { city: "Mysuru", loanAmount: 6000000 });
     assert.equal(res.status, 200);
     assert.equal(res.body.lead.city, "Mysuru");
     const ev = (await detail("emp1", lead.id)).body.timeline.find((e) => e.type === "updated");

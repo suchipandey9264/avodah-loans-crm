@@ -17,7 +17,7 @@ export const STATUS_LABELS = {
   qualified: "Qualified", converted: "Converted", lost: "Lost",
 };
 export const SOURCE_LABELS = {
-  website: "Website", walk_in: "Walk-in", call_centre: "Call centre", referral: "Referral",
+  website: "Website", website_callback: "Website – callback", website_credit_report: "Website – credit report", walk_in: "Walk-in", call_centre: "Call centre", referral: "Referral",
   partner_dsa: "Partner DSA", facebook_ads: "Facebook Ads", google_ads: "Google Ads", other: "Other",
 };
 /** A lead in one of these stages can be converted into a customer + application. */

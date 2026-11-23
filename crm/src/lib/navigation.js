@@ -35,5 +35,6 @@ export const SETTINGS_TABS = [
   { to: "/settings/audit-logs", label: "Audit logs", perm: "audit.view" },
   { to: "/settings/security", label: "Security", perm: null },
   { to: "/settings/general", label: "General", perm: "settings.view" },
+  { to: "/settings/website", label: "Website", perm: "settings.view" },
   { to: "/settings/notifications", label: "Notifications", perm: null },
 ];

@@ -6,7 +6,7 @@ import { hasPermission } from "./permissions.js";
 // Loan application rules shared by the CRM routes: who sees which files, how a file may move, what it needs.
 
 export const STAGE_LABELS = {
-  new: "New", login: "Login", documents: "Document verification", credit_review: "Credit review",
+  new: "Submitted", login: "Advisor call", documents: "Documents", credit_review: "Credit review", // first three use the website tracker's step names
   sanctioned: "Sanctioned", disbursed: "Disbursed", rejected: "Rejected",
 };
 export const FLOW = ["new", "login", "documents", "credit_review", "sanctioned", "disbursed"];

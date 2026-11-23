@@ -4,7 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Router } from "express";
 import { z } from "zod";
 import {
-  applications, followups, LEAD_SOURCES, LEAD_STATUSES, LEAD_TEMPERATURES, leads, lenders, roles, timelineEvents, users,
+  applications, followups, LEAD_SOURCES, LEAD_STATUSES, leads, lenders, roles, timelineEvents, users,
 } from "../../db/schema.js";
 import { audit } from "../../crm/audit.js";
 import { customerEvent } from "../../crm/customers.js";
@@ -37,7 +37,7 @@ const leadId = (raw) => {
 const COLUMNS = {
   id: leads.id, ref: leads.ref, kind: leads.kind, name: leads.name, phone: leads.phone, email: leads.email, city: leads.city,
   loanType: leads.loanType, loanAmount: leads.loanAmount, annualIncome: leads.annualIncome, employment: leads.employment,
-  source: leads.source, status: leads.status, temperature: leads.temperature, message: leads.message, lostReason: leads.lostReason,
+  source: leads.source, status: leads.status, message: leads.message, lostReason: leads.lostReason,
   ownerId: leads.ownerId, ownerName: owner.name, lastContactedAt: leads.lastContactedAt, convertedAt: leads.convertedAt,
   createdAt: leads.createdAt, updatedAt: leads.updatedAt, applicationId: applications.id, applicationRef: applications.ref,
 };
@@ -54,7 +54,6 @@ function listWhere(req, f, { withStatus = true } = {}) {
   if (f.source) w.push(eq(leads.source, f.source));
   if (f.city) w.push(ilike(leads.city, f.city.replace(/[\\%_]/g, "\\$&")));
   if (f.loanType) w.push(eq(leads.loanType, f.loanType));
-  if (f.temperature) w.push(eq(leads.temperature, f.temperature));
   if (f.owner === "unassigned") w.push(isNull(leads.ownerId));
   else if (f.owner === "me") w.push(eq(leads.ownerId, req.staff.id));
   else if (f.owner) w.push(eq(leads.ownerId, f.owner));
@@ -114,7 +113,6 @@ r.get("/leads/meta", can("leads.view"), async (req, res) => {
   res.json({
     statuses: LEAD_STATUSES.map((id) => ({ id, label: STATUS_LABELS[id] })),
     sources: LEAD_SOURCES.map((id) => ({ id, label: SOURCE_LABELS[id] })),
-    temperatures: LEAD_TEMPERATURES,
     loanTypes: LOAN_TYPES.map((t) => ({ id: t.id, label: t.label })),
     employment: EMPLOYMENT.map((e) => ({ id: e.id, label: e.label })),
     cities: cityRows.rows.map((x) => x.city),
@@ -161,9 +159,9 @@ const csvCell = (v) => {
 r.get("/leads/export", can("leads.export"), async (req, res) => {
   const f = parse(leadListQuery, req.query);
   const rows = await baseSelect().where(listWhere(req, f)).orderBy(...orderBy(f)).limit(5000);
-  const head = ["Lead ID", "Name", "Phone", "Email", "City", "Loan type", "Loan amount", "Annual income", "Employment", "Source", "Status", "Temperature", "Owner", "Last contact", "Created", "Application"];
+  const head = ["Lead ID", "Name", "Phone", "Email", "City", "Loan type", "Loan amount", "Annual income", "Employment", "Source", "Status", "Owner", "Last contact", "Created", "Application"];
   const body = rows.map((l) =>
-    [l.ref, l.name, l.phone, l.email, l.city, l.loanType && typeLabel(l.loanType), l.loanAmount, l.annualIncome, l.employment, SOURCE_LABELS[l.source], STATUS_LABELS[l.status], l.temperature, l.ownerName, l.lastContactedAt, l.createdAt, l.applicationRef]
+    [l.ref, l.name, l.phone, l.email, l.city, l.loanType && typeLabel(l.loanType), l.loanAmount, l.annualIncome, l.employment, SOURCE_LABELS[l.source], STATUS_LABELS[l.status], l.ownerName, l.lastContactedAt, l.createdAt, l.applicationRef]
       .map(csvCell)
       .join(",")
   );
@@ -233,7 +231,7 @@ r.post("/leads", can("leads.create"), async (req, res) => {
   res.status(201).json({ lead: { ...lead, ownerName: ownerRow?.name ?? null } });
 });
 
-const EDITABLE = ["name", "phone", "email", "city", "loanType", "loanAmount", "annualIncome", "employment", "source", "temperature", "message"];
+const EDITABLE = ["name", "phone", "email", "city", "loanType", "loanAmount", "annualIncome", "employment", "source", "message"];
 
 r.patch("/leads/:id", can("leads.edit"), async (req, res) => {
   const id = leadId(req.params.id);

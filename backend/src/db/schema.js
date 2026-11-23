@@ -231,8 +231,9 @@ export const applications = pgTable(
 
 export const LEAD_KINDS = ["callback", "credit-report", "crm"]; // how the lead arrived: website forms, or added in the CRM
 export const LEAD_STATUSES = ["new", "contacted", "interested", "docs_pending", "qualified", "converted", "lost"];
-export const LEAD_SOURCES = ["website", "walk_in", "call_centre", "referral", "partner_dsa", "facebook_ads", "google_ads", "other"];
-export const LEAD_TEMPERATURES = ["hot", "warm", "cold"];
+// website_callback / website_credit_report: set by a DB trigger (migration 0010) on leads from the website's forms, which insert without a source.
+export const LEAD_SOURCES = ["website", "website_callback", "website_credit_report", "walk_in", "call_centre", "referral", "partner_dsa", "facebook_ads", "google_ads", "other"];
+export const LEAD_TEMPERATURES = ["hot", "warm", "cold"]; // no longer used by the CRM; column kept so existing values aren't lost
 
 // Human-friendly lead IDs: L-1001, L-1002… (existing rows get one when the column is added).
 export const leadRefSeq = pgSequence("lead_ref_seq", { startWith: 1001 });

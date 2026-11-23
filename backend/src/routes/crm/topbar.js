@@ -4,7 +4,7 @@ import { users } from "../../db/schema.js";
 import { requireStaff } from "../../crm/middleware.js";
 import { leadScopeSql } from "../../crm/leads.js";
 import { hasPermission } from "../../crm/permissions.js";
-import { getGeneral, notificationPrefs } from "../../crm/settings.js";
+import { getSettings, notificationPrefs } from "../../crm/settings.js";
 import { searchQuery } from "../../crm/validate.js";
 import { LOAN_TYPES } from "../../data/loans.js";
 import { db } from "../../lib/db.js";
@@ -49,7 +49,7 @@ r.get("/notifications", requireStaff, async (req, res) => {
   const prefs = notificationPrefs(req.staff.profile); // Settings → Notifications switches types off per user
   const has = (p) => hasPermission(req.staff.permissions, p);
   const since = new Date(Date.now() - NOTIFY_DAYS * 86400000);
-  const soon = new Date(Date.now() + (await getGeneral()).followupReminderMinutes * 60000);
+  const soon = new Date(Date.now() + (await getSettings("general")).followupReminderMinutes * 60000);
   const [leads, applications, locks, reminders] = await Promise.all([
     // handled: the old app marks leads handled without changing status. (No SQL `--` comment here: it would swallow the scope clause.)
     prefs.leads && has("leads.view")
