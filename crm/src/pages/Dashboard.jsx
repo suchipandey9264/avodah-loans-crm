@@ -1,17 +1,15 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  ArrowDownRight, ArrowUpRight, Banknote, Building2, CheckCircle2, Clock, FileText, Minus, PhoneCall, RefreshCw,
-  UserPlus, Users, XCircle,
+  ArrowDownRight, ArrowUpRight, Banknote, Building2, CheckCircle2, Clock, FileText, Minus, RefreshCw, UserPlus, Users, XCircle,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { StatusBadge } from "../lib/leads";
-import { BarList, ColumnChart, DataTable, LineChart, ORDINAL, SegmentedBar, SERIES } from "../components/charts";
+import { useSearchParams } from "react-router-dom";
+import { BarList, CATEGORICAL, DataTable, DonutChart, LineChart, SegmentedBar, SERIES } from "../components/charts";
 import { ChartCard, DateRangeControl } from "../components/ReportBlocks";
-import { Alert, Avatar, Badge, Button, Card } from "../components/ui";
+import { Alert, Button, Card } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { describeRange, rangeFromParams } from "../lib/dateRange";
-import { bucketLabel, change, formatCount, formatMoney, formatMoneyTick, timeAgo } from "../lib/format";
+import { bucketLabel, change, formatCount, formatMoney } from "../lib/format";
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -47,31 +45,6 @@ function StatTile({ label, value, icon: Icon, tint, children }) {
       </div>
       <p className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight text-ink">{value}</p>
       {children}
-    </Card>
-  );
-}
-
-const LineKey = ({ color, label }) => (
-  <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: color }} aria-hidden />{label}</span>
-);
-
-const APP_STATUS = {
-  submitted: ["Submitted", "gray"],
-  in_review: ["In review", "amber"],
-  approved: ["Approved", "green"],
-  disbursed: ["Disbursed", "purple"],
-  rejected: ["Rejected", "red"],
-};
-
-function ListCard({ title, count, empty, className = "", children }) {
-  return (
-    // min-w-0: as a grid item the card would otherwise grow to fit its longest (truncated) line.
-    <Card className={`flex min-w-0 flex-col ${className}`}>
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
-        <h2 className="text-[15px] font-bold">{title}</h2>
-        {count != null && <span className="text-xs text-muted">{count}</span>}
-      </div>
-      {empty ? <p className="px-5 py-10 text-center text-sm text-muted">{empty}</p> : <ul className="divide-y divide-line">{children}</ul>}
     </Card>
   );
 }
@@ -130,9 +103,9 @@ export default function Dashboard() {
           {q.isError && <Alert>Couldn’t refresh — showing the last loaded figures. {q.error.message}</Alert>}
           <Kpis d={d} />
           <StatusAndAmounts d={d} />
-          <Charts d={d} xLabel={xLabel} xLabelLong={xLabelLong} unit={unit} />
-          <Recent d={d} />
-          {!Object.values(d.kpis).some(Boolean) && !d.series && (
+          <RatesAndLoanTypes d={d} xLabel={xLabel} xLabelLong={xLabelLong} unit={unit} />
+          <Breakdowns d={d} />
+          {!Object.values(d.kpis).some(Boolean) && !d.cities && !d.interestRates && (
             <Alert tone="info">Your role doesn’t include any dashboard figures yet. Ask an administrator if you need access.</Alert>
           )}
         </div>
@@ -156,7 +129,7 @@ function Kpis({ d }) {
       </StatTile>
     ),
     applications && (
-      <StatTile key="applications" label="Applications" value={formatCount(applications.value)} icon={FileText} tint="bg-orange-50 text-orange-700">
+      <StatTile key="applications" label="Total loan applications" value={formatCount(applications.value)} icon={FileText} tint="bg-orange-50 text-orange-700">
         <Delta value={applications.value} previous={applications.previous} />
       </StatTile>
     ),
@@ -187,7 +160,7 @@ function StatusAndAmounts({ d }) {
       {s && (
         <Card className="p-5">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-[15px] font-bold">Application status</h2>
+            <h2 className="text-[15px] font-bold">Application tracking</h2>
             <span className="text-xs text-muted">{formatCount(s.total)} applications</span>
           </div>
           <div className="mt-4">
@@ -238,188 +211,166 @@ function StatusAndAmounts({ d }) {
   );
 }
 
-function Charts({ d, xLabel, xLabelLong, unit }) {
-  const series = d.series;
-  const hasLeads = series?.[0] && "leads" in series[0];
-  const hasApps = series?.[0] && "applications" in series[0];
-  const lines = [hasLeads && { key: "leads", label: "Leads", color: SERIES[0] }, hasApps && { key: "applications", label: "Applications", color: SERIES[1] }].filter(Boolean);
-  const trendEmpty = !series || series.every((r) => lines.every((l) => !r[l.key]));
-  const valueEmpty = !hasApps || series.every((r) => !r.requested);
-  const per = unit === "month" ? "month" : unit === "week" ? "week" : "day";
-  const funnel = d.funnel;
+// Each loan type keeps its colour whatever the period (colour follows the entity, not its rank).
+const TYPE_COLOR = Object.fromEntries(["home", "lap", "personal", "education", "gold", "business", "car"].map((t, i) => [t, CATEGORICAL[i]]));
+const formatRate = (v) => (v == null ? "No quoted rate" : `${v.toFixed(2)}%`);
+const share = (n, total) => (total ? `${Math.round((n / total) * 100)}%` : "0%");
+
+function RatesAndLoanTypes({ d, xLabel, xLabelLong, unit }) {
+  const ir = d.interestRates;
   const types = d.loanTypes;
-
+  if (!ir && !types) return null;
+  const per = unit === "month" ? "month" : unit === "week" ? "week" : "day";
+  const typeTotal = (types ?? []).reduce((n, t) => n + t.count, 0);
   return (
-    <>
-      {(series || funnel) && (
-        <section aria-label="Sales conversion" className="grid gap-5 lg:grid-cols-3">
-          {series && (
-            <ChartCard
-              className={funnel ? "lg:col-span-2" : "lg:col-span-3"}
-              title={lines.length > 1 ? "Leads and applications" : "Leads"}
-              description={`New per ${per}`}
-              legend={lines.length > 1 && lines.map((l) => <LineKey key={l.key} color={l.color} label={l.label} />)}
-              empty={trendEmpty}
-              emptyText="No leads or applications in this period."
-              table={
-                <DataTable
-                  caption="Leads and applications by period"
-                  columns={[{ key: "bucket", label: per === "day" ? "Day" : per === "week" ? "Week of" : "Month", render: xLabel }, ...lines.map((l) => ({ key: l.key, label: l.label, align: "right" }))]}
-                  rows={series}
-                />
-              }
-            >
-              <LineChart data={series} series={lines} xLabel={xLabel} xLabelLong={xLabelLong} formatValue={formatCount} integer label={`Leads and applications per ${per}`} />
-            </ChartCard>
-          )}
-          {funnel && (
-            <ChartCard
-              title="Sales conversion"
-              description="Each step as a share of the step before"
-              empty={funnel.every((f) => !f.value)}
-              emptyText="Nothing to convert in this period."
-              table={
-                <DataTable
-                  caption="Sales conversion funnel"
-                  columns={[{ key: "label", label: "Stage" }, { key: "value", label: "Count", align: "right" }, { key: "rate", label: "Of previous", align: "right", render: (r) => r.rate }]}
-                  rows={funnel.map((f, i) => ({ ...f, rate: i ? rateText(f.value, funnel[i - 1].value) : "—" }))}
-                />
-              }
-            >
-              <BarList
-                colors={ORDINAL.slice(ORDINAL.length - funnel.length)}
-                items={funnel.map((f, i) => ({ key: f.stage, label: f.label, value: f.value, display: formatCount(f.value), note: i ? rateText(f.value, funnel[i - 1].value) : null }))}
-              />
-            </ChartCard>
-          )}
-        </section>
-      )}
-
-      {hasApps && (
-        <section aria-label="Loan value and mix" className="grid gap-5 lg:grid-cols-3">
-          <ChartCard
-            className={types ? "lg:col-span-2" : "lg:col-span-3"}
-            title="Loan value requested"
-            description={`Per ${per}, by application date`}
-            empty={valueEmpty}
-            emptyText="No applications in this period."
-            table={
-              <DataTable
-                caption="Loan value by period"
-                columns={[
-                  { key: "bucket", label: per === "day" ? "Day" : per === "week" ? "Week of" : "Month", render: xLabel },
-                  { key: "applications", label: "Applications", align: "right" },
-                  { key: "requested", label: "Requested", align: "right", render: (r) => formatMoney(r.requested) },
-                  { key: "disbursed", label: "Disbursed", align: "right", render: (r) => formatMoney(r.disbursed) },
-                ]}
-                rows={series}
-              />
-            }
-          >
-            <ColumnChart
-              data={series}
-              valueKey="requested"
-              label="Requested"
-              xLabel={xLabel}
-              xLabelLong={xLabelLong}
-              formatValue={formatMoney}
-              formatTick={formatMoneyTick}
-              extraRows={(r) => [{ label: "Disbursed", value: formatMoney(r.disbursed) }, { label: "Applications", value: formatCount(r.applications) }]}
+    <section aria-label="Interest rates and loan types" className="grid gap-5 lg:grid-cols-3">
+      {ir && (
+        <ChartCard
+          className={types ? "lg:col-span-2" : "lg:col-span-3"}
+          title="Interest rate trends"
+          description={
+            ir.average == null
+              ? `Average quoted rate per ${per}`
+              : `Average ${formatRate(ir.average)} this period${ir.previous != null ? ` · ${formatRate(ir.previous)} the period before` : ""}`
+          }
+          empty={ir.average == null}
+          emptyText="No applications with a quoted rate in this period."
+          table={
+            <DataTable
+              caption="Average interest rate by period"
+              columns={[
+                { key: "bucket", label: per === "day" ? "Day" : per === "week" ? "Week of" : "Month", render: xLabel },
+                { key: "applications", label: "Applications", align: "right" },
+                { key: "rate", label: "Average rate", align: "right", render: (r) => (r.rate == null ? "—" : formatRate(r.rate)) },
+              ]}
+              rows={ir.series}
             />
-          </ChartCard>
-          {types && (
-            <ChartCard
-              title="Loan-type mix"
-              description="Applications by product"
-              empty={!types.length}
-              emptyText="No applications in this period."
-              table={
-                <DataTable
-                  caption="Applications by loan type"
-                  columns={[{ key: "label", label: "Loan type" }, { key: "count", label: "Applications", align: "right" }, { key: "amount", label: "Requested", align: "right", render: (r) => formatMoney(r.amount) }]}
-                  rows={types}
-                />
-              }
-            >
-              <BarList items={types.map((t) => ({ key: t.type, label: t.label, value: t.count, display: formatCount(t.count), note: formatMoney(t.amount) }))} />
-            </ChartCard>
-          )}
-        </section>
+          }
+        >
+          <LineChart
+            data={ir.series}
+            series={[{ key: "rate", label: "Average rate", color: SERIES[0] }]}
+            xLabel={xLabel}
+            xLabelLong={xLabelLong}
+            formatValue={formatRate}
+            formatTick={(t) => `${t}%`}
+            label={`Average interest rate per ${per}`}
+          />
+        </ChartCard>
       )}
-    </>
+      {types && (
+        <ChartCard
+          title="Loan type distribution"
+          description="Share of applications by product"
+          empty={!types.length}
+          emptyText="No applications in this period."
+          table={
+            <DataTable
+              caption="Applications by loan type"
+              columns={[
+                { key: "label", label: "Loan type" },
+                { key: "count", label: "Applications", align: "right" },
+                { key: "share", label: "Share", align: "right", render: (r) => share(r.count, typeTotal) },
+                { key: "amount", label: "Requested", align: "right", render: (r) => formatMoney(r.amount) },
+              ]}
+              rows={types}
+            />
+          }
+        >
+          <DonutChart
+            label="Loan type distribution"
+            unit="applications"
+            parts={types.map((t) => ({ key: t.type, label: t.label, value: t.count, color: TYPE_COLOR[t.type] ?? "#a8a3b5" }))}
+          />
+        </ChartCard>
+      )}
+    </section>
   );
 }
 
-const rateText = (value, prev) => (prev ? `${Math.round((value / prev) * 100)}%` : "—");
-
-function Recent({ d }) {
-  const lists = [
-    d.recentLeads && (
-      <ListCard key="leads" title="Recent leads" empty={!d.recentLeads.length && "No new leads in this period."}>
-        {d.recentLeads.map((l) => (
-          <li key={l.id} className="flex items-center gap-3 px-5 py-3">
-            <Avatar name={l.name} size="sm" />
-            <div className="min-w-0 flex-1">
-              <Link to={`/leads?lead=${l.id}`} className="block truncate text-sm font-semibold hover:text-brand-700 hover:underline">{l.name}</Link>
-              <p className="truncate text-xs text-muted">{l.ref} · {l.kind === "crm" ? "Added in CRM" : l.kind === "callback" ? "Callback request" : "Credit report request"} · +91 {l.phone}</p>
-            </div>
-            <div className="text-right">
-              <StatusBadge status={l.status} />
-              <p className="mt-1 text-[11px] text-muted">{timeAgo(l.createdAt)}</p>
-            </div>
-          </li>
-        ))}
-      </ListCard>
-    ),
-    d.recentApplications && (
-      <ListCard key="apps" title="Recent applications" empty={!d.recentApplications.length && "No applications in this period."}>
-        {d.recentApplications.map((x) => {
-          const [label, tone] = APP_STATUS[x.status] ?? [x.status, "gray"];
-          return (
-            <li key={x.id} className="flex items-center gap-3 px-5 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{x.name ?? "Customer"} <Link to={`/applications/${x.id}`} className="font-normal text-brand-700 hover:underline">· {x.ref}</Link></p>
-                <p className="truncate text-xs text-muted">{x.loanType} · {x.lenderName}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-bold">{formatMoney(x.loanAmount)}</p>
-                <Badge tone={tone}>{label}</Badge>
-              </div>
-            </li>
-          );
-        })}
-      </ListCard>
-    ),
-    d.activity && (
-      <ListCard
-        key="activity"
-        title="Recent activity"
-        // With all three lists on a two-column grid, activity takes the full second row.
-        className={d.recentLeads && d.recentApplications ? "lg:col-span-2 2xl:col-span-1" : ""}
-        empty={!d.activity.length && "No activity in this period."}
+function Breakdowns({ d }) {
+  const { topLenders, cities, eligibility } = d;
+  const cards = [
+    topLenders && (
+      <ChartCard
+        key="lenders"
+        title="Top lenders"
+        description="Most applications this period"
+        empty={!topLenders.length}
+        emptyText="No applications in this period."
+        table={
+          <DataTable
+            caption="Top lenders"
+            columns={[
+              { key: "name", label: "Lender" },
+              { key: "count", label: "Applications", align: "right" },
+              { key: "disbursed", label: "Disbursed", align: "right", render: (r) => formatMoney(r.disbursed) },
+            ]}
+            rows={topLenders}
+          />
+        }
       >
-        {d.activity.map((a) => <ActivityRow key={`${a.type}:${a.id}`} a={a} />)}
-      </ListCard>
+        <BarList items={topLenders.map((l) => ({ key: l.id, label: l.name, value: l.count, display: formatCount(l.count), note: `${formatMoney(l.disbursed)} disbursed` }))} />
+      </ChartCard>
+    ),
+    cities && (
+      <ChartCard
+        key="cities"
+        title="City-wise loan enquiries"
+        description={`${formatCount(cities.total)} enquiries (leads) this period`}
+        empty={!cities.total}
+        emptyText="No enquiries in this period."
+        table={
+          <DataTable
+            caption="Loan enquiries by city"
+            columns={[
+              { key: "city", label: "City" },
+              { key: "count", label: "Enquiries", align: "right" },
+              { key: "share", label: "Share", align: "right", render: (r) => share(r.count, cities.total) },
+            ]}
+            rows={cities.list}
+          />
+        }
+      >
+        <BarList items={cities.list.map((c) => ({ key: c.city, label: c.city, value: c.count, display: share(c.count, cities.total), note: formatCount(c.count) }))} />
+      </ChartCard>
+    ),
+    eligibility && (
+      <ChartCard
+        key="eligibility"
+        title="Eligibility insights"
+        description="Applications by the applicant’s credit score, with approval rate"
+        empty={eligibility.every((e) => !e.applications)}
+        emptyText="No applications in this period."
+        table={
+          <DataTable
+            caption="Applications by credit score"
+            columns={[
+              { key: "label", label: "Credit score" },
+              { key: "applications", label: "Applications", align: "right" },
+              { key: "approved", label: "Approved", align: "right" },
+              { key: "rejected", label: "Rejected", align: "right" },
+            ]}
+            rows={eligibility}
+          />
+        }
+      >
+        <BarList
+          items={eligibility.map((e) => ({
+            key: e.band,
+            label: e.label,
+            value: e.applications,
+            display: formatCount(e.applications),
+            note: e.applications ? `${share(e.approved, e.applications)} approved` : null,
+          }))}
+        />
+      </ChartCard>
     ),
   ].filter(Boolean);
-  if (!lists.length) return null;
-  return <section aria-label="Recent records" className={`grid gap-5 ${lists.length === 3 ? "lg:grid-cols-2 2xl:grid-cols-3" : lists.length === 2 ? "lg:grid-cols-2" : ""}`}>{lists}</section>;
-}
-
-function ActivityRow({ a }) {
-  const [Icon, tint, text] =
-    a.type === "lead"
-      ? [PhoneCall, "bg-brand-50 text-brand-700", <><strong className="font-semibold">{a.name}</strong> asked for {a.kind === "callback" ? "a callback" : "a credit report"}</>]
-      : a.type === "application"
-        ? [FileText, "bg-orange-50 text-orange-700", <><strong className="font-semibold">{a.name ?? "A customer"}</strong> applied for a {a.loanType} of {formatMoney(a.loanAmount)} with {a.lenderName}</>]
-        : [Users, "bg-sky-50 text-sky-700", <><Link to={`/customers/${a.id}`} className="font-semibold hover:text-brand-700 hover:underline">{a.name}</Link> became a customer</>];
+  if (!cards.length) return null;
   return (
-    <li className="flex gap-3 px-5 py-3">
-      <span className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg ${tint}`} aria-hidden><Icon className="size-4" /></span>
-      <div className="min-w-0 text-sm">
-        <p>{text}</p>
-        <p className="mt-0.5 text-xs text-muted">{timeAgo(a.at)}</p>
-      </div>
-    </li>
+    <section aria-label="Lenders, cities and eligibility" className={`grid gap-5 ${cards.length === 3 ? "lg:grid-cols-3" : cards.length === 2 ? "lg:grid-cols-2" : ""}`}>
+      {cards}
+    </section>
   );
 }
